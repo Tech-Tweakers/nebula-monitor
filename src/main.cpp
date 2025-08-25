@@ -1,4 +1,7 @@
 #include <Arduino.h>
+#include <WiFi.h>
+#include <HTTPClient.h>
+
 #include <SPI.h>
 #include <TFT_eSPI.h>
 #include <XPT2046_Touchscreen.h>
@@ -11,127 +14,253 @@ TFT_eSPI tft = TFT_eSPI();
 #define XPT2046_MISO 39
 #define XPT2046_CLK  25
 #define XPT2046_CS   33
-
 SPIClass touchscreenSPI(VSPI);
 XPT2046_Touchscreen touchscreen(XPT2046_CS, XPT2046_IRQ);
 
-// --- Tela
-#define SCREEN_WIDTH  320
-#define SCREEN_HEIGHT 240
+// --- WiFi (preencher)
+const char* WIFI_SSID = "Polaris";
+const char* WIFI_PASS = "55548502";
 
-// --- Botão (topo, centralizado)
-#define BTN_WIDTH   120
-#define BTN_HEIGHT   40
-#define BTN_Y        10
-int BTN_X = (SCREEN_WIDTH - BTN_WIDTH) / 2;
+// --- Dimensões dinâmicas
+int16_t SW = 320, SH = 240;
+
+// --- Botão topo
+#define BTN_WIDTH   150
+#define BTN_HEIGHT   32
+#define BTN_Y         6
+int BTN_X = 0;
 
 // --- Backlight
 static const int BL_PIN = 27;
 static inline void setBL(bool on){ pinMode(BL_PIN, OUTPUT); digitalWrite(BL_PIN, on ? HIGH : LOW); }
 
-// --- Utils de cor (RGB888 -> RGB565)
-static inline uint16_t RGB(uint8_t r,uint8_t g,uint8_t b){
-  return ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3);
-}
-static inline bool isDark565(uint16_t c){
-  uint8_t r = ((c >> 11) & 0x1F) * 255 / 31;
-  uint8_t g = ((c >> 5)  & 0x3F) * 255 / 63;
-  uint8_t b = ( c        & 0x1F) * 255 / 31;
-  float L = 0.2126f*r + 0.7152f*g + 0.0722f*b;
-  return L < 140.0f;
-}
+// --- Paleta
+#define COL_BG   TFT_BLACK
+#define COL_BTN  0x528A
+#define COL_UP   0x07E0
+#define COL_DOWN 0xF800
+#define COL_UNK  0x8410
 
-// --- Paleta que gira a cada clique
-const uint16_t PALETTE[] = {
-  RGB(220, 60, 60),   // vermelho
-  RGB(255,160,  0),   // laranja
-  RGB(255,220,  0),   // amarelo
-  RGB(  0,200, 90),   // verde
-  RGB(  0,180,200),   // ciano
-  RGB( 70,100,255),   // azul
-  RGB(180, 80,220),   // roxo
-  RGB(230,110,180)    // rosa
+// --- Fonte garantida
+#define FONT_ID 1  // GLCD
+
+// --- Alvos
+struct Target { const char* name; const char* url; };
+Target targets[] = {
+  {"Polaris API",      "http://10.10.10.60:8000/health"},
+  {"Integrations",     "http://10.10.10.61:8001/health"},
+  {"Prometheus",       "http://10.10.10.50:9090/-/ready"},
+  {"Pushgateway",      "http://10.10.10.50:9091/-/ready"},
+  {"Grafana",          "http://10.10.10.50:3000/api/health"},
+  {"ChromaDB",         "http://10.10.10.62:8002/health"},
+  {"Mongo Exporter",   "http://10.10.10.62:9216/metrics"},
+  {"Telegram Bot",     "http://10.10.10.64:8080/health"}
 };
-const int PALETTE_SIZE = sizeof(PALETTE)/sizeof(PALETTE[0]);
-int colorIndex = 0;
-uint16_t baseColor = PALETTE[0];
+const int N_TARGETS = sizeof(targets)/sizeof(targets[0]);
 
-// --- HUD de métricas
-void showDrawTime(uint32_t us){
-  tft.fillRect(0, SCREEN_HEIGHT - 18, SCREEN_WIDTH, 18, TFT_BLACK);
-  tft.setTextDatum(MC_DATUM);
-  tft.setTextColor(TFT_WHITE, TFT_BLACK);
-  char buf[32];
-  snprintf(buf, sizeof(buf), "%lu us", (unsigned long)us);
-  tft.drawCentreString(buf, SCREEN_WIDTH/2, SCREEN_HEIGHT - 9, 2);
+// --- Estado
+enum Status : uint8_t { UNKNOWN=0, UP=1, DOWN=2 };
+Status   statArr[16];
+uint16_t latMs[16];
+bool     autoRefresh = true;
+
+// --- Grid (fixo 2 colunas)
+const int PAD = 8;
+const int FOOTER_H = 18;
+const int MIN_TILE_H = 30;
+int gridTop = 0, cols = 2, rows = 0, tileW = 0, tileH = 0;
+
+// --- Touch
+bool touching = false;
+
+// --- Refresh
+uint32_t nextRefresh = 0, lastRefresh = 0;
+const uint32_t AUTO_MS = 10000;
+const uint16_t HTTP_TIMEOUT_MS = 2000;
+
+// Limpa fantasmas SEM resetar o painel: varre todas as rotações
+void safeWipeAll(uint8_t finalRot = 2){
+  tft.resetViewport();          // remove qualquer clipping pendente
+  for (uint8_t r = 0; r < 4; r++){
+    tft.setRotation(r);
+    tft.fillScreen(TFT_BLACK);
+    delay(2);
+  }
+  tft.setRotation(finalRot);
+  tft.fillScreen(TFT_BLACK);
 }
 
-// --- Desenho do botão (sem "escurecer")
-uint32_t drawButton() {
-  uint32_t t0 = micros();
-  tft.fillRoundRect(BTN_X, BTN_Y, BTN_WIDTH, BTN_HEIGHT, 8, baseColor);
-  tft.setTextDatum(MC_DATUM);
-  uint16_t txt = isDark565(baseColor) ? TFT_WHITE : TFT_BLACK;
-  tft.setTextColor(txt, baseColor);  // fundo do texto = cor do botão
-  tft.drawCentreString("Clique", BTN_X + BTN_WIDTH/2, BTN_Y + BTN_HEIGHT/2 - 6, 2);
-  return micros() - t0;
+
+// ---------------- UI helpers ----------------
+void computeGrid(){
+  rows  = (N_TARGETS + cols - 1) / cols;  // 2 colunas
+  gridTop = BTN_Y + BTN_HEIGHT + 8;
+  tileW = (SW - (cols + 1) * PAD) / cols;
+  int availH = SH - gridTop - (rows + 1) * PAD - FOOTER_H;
+  tileH = availH / rows;
+  if (tileH < MIN_TILE_H) tileH = MIN_TILE_H;
 }
 
-// --- Hit test
-bool isTouchInsideButton(int x, int y) {
+void drawFrameDebug(){ tft.drawRect(0, 0, SW, SH, TFT_WHITE); }
+
+void drawTopButton(){
+  uint16_t c = autoRefresh ? 0x1A9F : COL_BTN;
+  tft.fillRoundRect(BTN_X, BTN_Y, BTN_WIDTH, BTN_HEIGHT, 8, c);
+  tft.setTextDatum(MC_DATUM);
+  tft.setTextFont(FONT_ID);
+  tft.setTextColor(TFT_BLACK, c);
+  tft.drawCentreString(autoRefresh ? "Auto: ON" : "Auto: OFF",
+                       BTN_X + BTN_WIDTH/2, BTN_Y + BTN_HEIGHT/2 - 5, FONT_ID);
+}
+
+void drawTile(int idx){
+  int r = idx / cols, c = idx % cols;
+  int x = PAD + c*(tileW + PAD);
+  int y = gridTop + PAD + r*(tileH + PAD);
+
+  Status st = statArr[idx];
+  uint16_t bg = (st==UP) ? COL_UP : (st==DOWN ? COL_DOWN : COL_UNK);
+  tft.fillRoundRect(x, y, tileW, tileH, 6, bg);
+
+  tft.setTextDatum(TL_DATUM);
+  tft.setTextFont(FONT_ID);
+  tft.setTextColor(TFT_WHITE, bg);
+  tft.drawString(targets[idx].name, x+6, y+4, FONT_ID);
+
+  char buf[48];
+  const char* sname = (st==UP) ? "UP" : (st==DOWN ? "DOWN" : "UNK");
+  if (st==UP) snprintf(buf, sizeof(buf), "%s  %u ms", sname, (unsigned)latMs[idx]);
+  else        snprintf(buf, sizeof(buf), "%s", sname);
+  tft.drawString(buf, x+6, y+4+12, FONT_ID);
+}
+
+void drawAllTiles(){ for (int i=0;i<N_TARGETS;i++) drawTile(i); }
+
+void showFooter(const char* msg){
+  tft.fillRect(0, SH - FOOTER_H, SW, FOOTER_H, COL_BG);
+  tft.setTextDatum(MC_DATUM);
+  tft.setTextFont(FONT_ID);
+  tft.setTextColor(TFT_WHITE, COL_BG);
+  tft.drawCentreString(msg, SW/2, SH - FOOTER_H/2, FONT_ID);
+}
+
+// ---------------- NET ----------------
+uint16_t httpCheck(const char* url){
+  if (WiFi.status() != WL_CONNECTED) return 0;
+  HTTPClient http; http.setTimeout(HTTP_TIMEOUT_MS);
+  uint32_t t0 = millis();
+  if (!http.begin(url)) return 0;
+  int code = http.GET(); uint32_t dt = millis() - t0;
+  http.end();
+  if (code == HTTP_CODE_OK) { if (dt > 65535) dt = 65535; return (uint16_t)dt; }
+  return 0;
+}
+
+void refreshAll(){
+  lastRefresh = millis();
+  int ok=0, fail=0;
+  for (int i=0;i<N_TARGETS;i++){
+    uint16_t ms = httpCheck(targets[i].url);
+    if (ms > 0){ statArr[i]=UP; latMs[i]=ms; ok++; }
+    else       { statArr[i]=DOWN; latMs[i]=0;   fail++; }
+    drawTile(i);
+  }
+  char hud[64];
+  snprintf(hud, sizeof(hud), "Atualizado: %lu  |  OK:%d  FAIL:%d",
+           (unsigned long)(lastRefresh/1000), ok, fail);
+  showFooter(hud);
+  Serial.println(hud);
+}
+
+// ---------------- Setup / Loop ----------------
+void applyRotation(uint8_t r){
+  tft.setRotation(r);
+  touchscreen.setRotation(r);
+  SW = tft.width(); SH = tft.height();
+  BTN_X = (SW - BTN_WIDTH) / 2;
+  computeGrid();
+}
+
+bool isTouchInsideButton(int x, int y){
   return x >= BTN_X && x <= (BTN_X + BTN_WIDTH) &&
          y >= BTN_Y && y <= (BTN_Y + BTN_HEIGHT);
 }
 
-// --- Estado de toque (edge detection)
-bool touching = false;
-uint32_t lastTapMs = 0;
-const uint16_t DEBOUNCE_MS = 120;
+void connectWiFi(){
+  tft.fillScreen(COL_BG);
+  tft.setTextDatum(MC_DATUM);
+  tft.setTextFont(FONT_ID);
+  tft.setTextColor(TFT_WHITE, COL_BG);
+  tft.drawCentreString("Conectando Wi-Fi...", SW/2, SH/2, FONT_ID);
+
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(WIFI_SSID, WIFI_PASS);
+  uint32_t t0 = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - t0 < 15000){
+    delay(250); Serial.print(".");
+  }
+  Serial.println(WiFi.status()==WL_CONNECTED ? "\nWiFi OK" : "\nWiFi falhou");
+}
 
 void setup() {
   Serial.begin(115200);
   delay(100);
 
-  setBL(true);
+  setBL(false); // sem flash durante init
 
-  // Touch SPI (pinos custom VSPI)
+  // Touch
   touchscreenSPI.begin(XPT2046_CLK, XPT2046_MISO, XPT2046_MOSI, XPT2046_CS);
   touchscreen.begin(touchscreenSPI);
-  touchscreen.setRotation(2); // igual ao TFT
 
   // TFT
   tft.init();
-  tft.setRotation(2);         // "Rotation 2"
-  tft.fillScreen(TFT_BLACK);
+  applyRotation(0);      // já define SW/SH e rot do touch
+  safeWipeAll(0);        // limpa SEM resetar a controladora
+  tft.fillScreen(COL_BG);
 
-  showDrawTime(drawButton());
+
+  // Info de debug na tela
+  tft.setTextDatum(TL_DATUM);
+  tft.setTextFont(FONT_ID);
+  tft.setTextColor(TFT_WHITE, COL_BG);
+  char wh[24]; snprintf(wh, sizeof(wh), "%dx%d", SW, SH);
+  tft.drawString(wh, 2, 2, FONT_ID);
+  drawFrameDebug();
+
+  // WiFi + UI
+  connectWiFi();
+  //drawTopButton();
+  for (int i=0;i<N_TARGETS;i++){ statArr[i]=UNKNOWN; latMs[i]=0; }
+  drawAllTiles();
+  showFooter("Aguardando primeira varredura...");
+
+  setBL(true);
+
+  refreshAll();
+  nextRefresh = millis() + AUTO_MS;
+
+  Serial.printf("Display: %dx%d (rot=2)\n", SW, SH);
 }
 
 void loop() {
-  bool nowTouching = touchscreen.touched();
-
-  // Borda de subida (finger down) = 1 clique
-  if (nowTouching && !touching) {
-    TS_Point p = touchscreen.getPoint();
-
-    // Calibração bruta -> pixels (ajuste fino se necessário)
-    int x = map(p.x, 200, 3700, 1, SCREEN_WIDTH);
-    int y = map(p.y, 240, 3800, 1, SCREEN_HEIGHT);
-
-    // Rotação 2: espelha os dois eixos
-    x = SCREEN_WIDTH  - x;
-    y = SCREEN_HEIGHT - y;
-
-    uint32_t nowMs = millis();
-    if (nowMs - lastTapMs > DEBOUNCE_MS && isTouchInsideButton(x, y)) {
-      colorIndex = (colorIndex + 1) % PALETTE_SIZE;
-      baseColor  = PALETTE[colorIndex];
-      uint32_t us = drawButton();
-      showDrawTime(us);
-      Serial.print("Tap draw time: "); Serial.print(us); Serial.println(" us");
-      lastTapMs = nowMs;
-    }
+  if (autoRefresh && millis() >= nextRefresh){
+    refreshAll();
+    nextRefresh = millis() + AUTO_MS;
   }
 
-  touching = nowTouching;
+  bool nowTouch = touchscreen.touched();
+  if (nowTouch && !touching){
+    TS_Point p = touchscreen.getPoint();
+    int x = map(p.x, 200, 3700, 1, SW);
+    int y = map(p.y, 240, 3800, 1, SH);
+    x = SW - x; y = SH - y; // rot=2
+
+    if (isTouchInsideButton(x,y)){
+      autoRefresh = !autoRefresh;
+      //drawTopButton();
+      refreshAll();
+      nextRefresh = millis() + AUTO_MS;
+    }
+  }
+  touching = nowTouch;
 }

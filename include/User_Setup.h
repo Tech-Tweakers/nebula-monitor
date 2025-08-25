@@ -8,7 +8,7 @@
 #define TFT_SCLK 14
 #define TFT_CS   15
 #define TFT_DC    2
-#define TFT_RST   4     // se o teu não usa RST, troque para -1
+#define TFT_RST   -1     // se o teu não usa RST, troque para -1
 
 #define SPI_FREQUENCY       40000000
 #define SPI_READ_FREQUENCY  20000000
