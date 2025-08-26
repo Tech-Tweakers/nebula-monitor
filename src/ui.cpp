@@ -2,7 +2,7 @@
 #include <algorithm>
 using std::max;
 
-static LGFX display;
+static LGFX display;                 // LovyanGFX autodetect
 static int16_t gSW=240, gSH=320;
 static int gBAR_H=30, gFOOTER_H=16;
 static const int PAD=8, R=6;
@@ -16,8 +16,8 @@ void begin(uint8_t rot, int bl_pin){
   pinMode(bl_pin, OUTPUT); digitalWrite(bl_pin, HIGH);
   display.setColorDepth(16);
   display.setRotation(rot);
-  display.setTextWrap(false);
   display.setFont(LGFX_FONT);
+  display.setTextWrap(false);
 
   gSW = display.width();
   gSH = display.height();
@@ -28,6 +28,7 @@ void begin(uint8_t rot, int bl_pin){
 int SW(){ return gSW; }
 int SH(){ return gSH; }
 int barHeight(){ return gBAR_H; }
+
 void setCols(int cols){ COLS = (cols<1)?1:cols; }
 
 void computeGrid(int nTargets){
@@ -39,22 +40,32 @@ void computeGrid(int nTargets){
   tileH = max(needH, availH / rows);
 }
 
-// Overload antigo (2 args): encaminha para a versão nova (3 args)
+void safeWipeAll(uint8_t finalRot){
+  display.setClipRect(0, 0, display.width(), display.height());
+  for (uint8_t r=0;r<4;r++){
+    display.setRotation(r);
+    display.fillScreen(TFT_BLACK);
+    delay(2);
+  }
+  display.setRotation(finalRot);
+  display.fillScreen(TFT_BLACK);
+}
+
+// Overload antigo (2 args)
 void drawTopBar(bool autoRefresh, uint32_t lastRefresh_ms){
   drawTopBar(autoRefresh, lastRefresh_ms, nullptr);
 }
 
-// Versão nova (3 args) com hint à direita
-void drawTopBar(bool autoRefresh, uint32_t lastRefresh_ms, const char* rightHint){
+// Nova versão com hint à direita
+void drawTopBar(bool /*autoRefresh*/, uint32_t lastRefresh_ms, const char* rightHint){
   display.fillRect(0,0,gSW,gBAR_H, COL_BAR);
   display.setFont(LGFX_FONT);
   display.setTextColor(COL_TXT, COL_BAR);
   display.setTextWrap(false);
 
-    const char* title = "Nebula Monitoring v0.1.0";
-    int16_t y = (gBAR_H - display.fontHeight())/2;
-    display.setCursor(PAD, y);
-    display.print(title);
+  const char* title = "Nebula Remote Monitoring";
+  int16_t y = (gBAR_H - display.fontHeight())/2;
+  display.setCursor(PAD, y); display.print(title);
 
   char right[32];
   if (rightHint && *rightHint) {
@@ -128,17 +139,6 @@ void drawAllTiles(const TileInfo* arr, int n){
 bool insideTile(int idx, int sx, int sy){
   int x,y; tilePos(idx,x,y);
   return sx>=x && sx<=x+tileW && sy>=y && sy<=y+tileH;
-}
-
-void safeWipeAll(uint8_t finalRot){
-  display.setClipRect(0, 0, display.width(), display.height());
-  for (uint8_t r=0;r<4;r++){
-    display.setRotation(r);
-    display.fillScreen(TFT_BLACK);
-    delay(2);
-  }
-  display.setRotation(finalRot);
-  display.fillScreen(TFT_BLACK);
 }
 
 } // namespace UI

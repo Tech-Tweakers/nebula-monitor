@@ -14,11 +14,12 @@ namespace UI {
   void     begin(uint8_t rot = ROT, int bl_pin = BL_PIN);
   int      SW();
   int      SH();
-
+  int      barHeight();
   void     setCols(int cols);
   void     computeGrid(int nTargets);
+  void     safeWipeAll(uint8_t finalRot = ROT);
 
-  // OVERLOADS: 2 e 3 parâmetros (para compatibilidade)
+  // Top bar (duas assinaturas)
   void     drawTopBar(bool autoRefresh, uint32_t lastRefresh_ms);
   void     drawTopBar(bool autoRefresh, uint32_t lastRefresh_ms, const char* rightHint);
 
@@ -27,7 +28,4 @@ namespace UI {
   void     drawTile(int idx, const TileInfo& t);
   void     drawAllTiles(const TileInfo* arr, int n);
   bool     insideTile(int idx, int sx, int sy);
-
-  int      barHeight();
-  void     safeWipeAll(uint8_t finalRot = ROT);
 }
