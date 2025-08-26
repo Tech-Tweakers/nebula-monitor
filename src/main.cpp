@@ -14,13 +14,13 @@ struct Target {
 
 Target targets[] = {
   {"Hyper-V/VMM", "https://192.168.1.128:8006/", UNKNOWN, 0},
-  {"Grafana",       "http://192.168.1.128:3000/",  UNKNOWN, 0},
-  {"Polaris API",   "https://endangered-musician-bolt-berlin.trycloudflare.com/inference/", UNKNOWN,0},
-  {"Polaris INT",   "https://ebfc52323306.ngrok-free.app", UNKNOWN, 0},
-  {"Polaris WEB",   "https://tech-tweakers.github.io/polaris-v2-web/", UNKNOWN, 0},
-  {"DNS Server",    "https://tech-tweakers.github.io/polaris-v2-web/", UNKNOWN, 0},
-  {"Router #1",     "http://192.168.1.1/", UNKNOWN, 0},
-  {"Router #2",     "http://192.168.1.172", UNKNOWN, 0}
+  {"Grafana",     "http://192.168.1.128:3000/",  UNKNOWN, 0},
+  {"Polaris API", "https://endangered-musician-bolt-berlin.trycloudflare.com/inference/", UNKNOWN,0},
+  {"Polaris INT", "https://ebfc52323306.ngrok-free.app", UNKNOWN, 0},
+  {"Polaris WEB", "https://tech-tweakers.github.io/polaris-v2-web/", UNKNOWN, 0},
+  {"DNS Server",  "https://tech-tweakers.github.io/polaris-v2-web/", UNKNOWN, 0},
+  {"Router #1",   "http://192.168.1.1/", UNKNOWN, 0},
+  {"Router #2",   "http://192.168.1.172", UNKNOWN, 0}
 };
 static const int N_TARGETS = sizeof(targets)/sizeof(targets[0]);
 
@@ -59,6 +59,10 @@ void setup(){
   // UI
   UI::begin(ROT, BL_PIN);
   UI::safeWipeAll(ROT);
+
+  // (opcional) splash com PNG no LittleFS:
+  // UI::splashLogo("/tt_logo.png");
+
   UI::setCols(2);
   UI::computeGrid(N_TARGETS);
   UI::drawTopBar(autoRefresh, lastRefresh);
@@ -72,9 +76,9 @@ void setup(){
   Touch::beginHSPI();
 
   // Net
-  if (Net::connectWiFi(WIFI_SSID, WIFI_PASS)) {
+  if (Net::connectWiFi("Polaris","55548502")) {
     Net::printInfo();
-    Net::forceDNS();       // 8.8.8.8 + 1.1.1.1
+    Net::forceDNS();
     Net::printInfo();
     bool ntp_ok = Net::ntpSync();
     UI::showFooter(ntp_ok ? "Wi-Fi OK | NTP OK" : "Wi-Fi OK | NTP FAIL");
@@ -92,13 +96,11 @@ void setup(){
 
 // ---------------- Loop ----------------
 void loop(){
-  // Auto-refresh
   if (autoRefresh && millis() >= nextRefresh){
     refreshAll();
     nextRefresh = millis() + AUTO_MS;
   }
 
-  // Touch
   static bool touching=false;
   bool nowTouch = Touch::touched();
   if (nowTouch && !touching){
@@ -110,7 +112,7 @@ void loop(){
       UI::drawTopBar(autoRefresh, lastRefresh);
       refreshAll();
       nextRefresh = millis() + AUTO_MS;
-      Serial.printf("[AUTO] %s\n", autoRefresh ? "ON" : "OFF");
+      //Serial.printf("[AUTO] %s\n", autoRefresh ? "ON" : "OFF");
     } else {
       uint32_t nowMs = millis();
       if (nowMs - lastTapMs > DEBOUNCE_MS){
@@ -123,8 +125,9 @@ void loop(){
             UI::drawTile(i, ti);
             UI::drawTopBar(autoRefresh, lastRefresh);
             char hud[64];
-            snprintf(hud,sizeof(hud), "%s: %s %ums", targets[i].name,
-                     targets[i].st==UP?"UP":"DOWN", (unsigned)targets[i].lat_ms);
+            snprintf(hud,sizeof(hud), "%s: %s %ums",
+                     targets[i].name, targets[i].st==UP?"UP":"DOWN",
+                     (unsigned)targets[i].lat_ms);
             UI::showFooter(hud);
             Serial.printf("[ONE] %s -> %s (%ums)\n", targets[i].name,
                           targets[i].st==UP?"UP":"DOWN", (unsigned)targets[i].lat_ms);
