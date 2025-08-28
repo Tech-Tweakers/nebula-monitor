@@ -1,48 +1,46 @@
 #pragma once
 
-// Evita dups dos defines se também vierem via build_flags
-#ifndef LGFX_USE_V1
-  #define LGFX_USE_V1
-#endif
-#ifndef LGFX_AUTODETECT
-  #define LGFX_AUTODETECT
-#endif
-
-#include <LovyanGFX.hpp>
+#include <TFT_eSPI.h>
+#include <SPI.h>
 
 // ----------------- Hardware base -----------------
-static constexpr uint8_t ROT    = 2;   // rotação da tua montagem
+static constexpr uint8_t ROT    = 2;   // rotação landscape (como no tutorial)
 static constexpr int     BL_PIN = 27;  // backlight
 
-// Touch (XPT2046) no HSPI compartilhado com o LCD
-static constexpr int T_SCK  = 14;
-static constexpr int T_MOSI = 13;
-static constexpr int T_MISO = 12;
-static constexpr int T_CS   = 33;
-static constexpr int T_IRQ  = 36; // ativo em LOW
+// Touch (XPT2046) - pinagem CORRETA da CYD
+static constexpr int T_SCK  = 14;  // T_CLK (HSPI)
+static constexpr int T_MOSI = 13;  // T_DIN (HSPI)
+static constexpr int T_MISO = 12;  // T_OUT (HSPI)
+static constexpr int T_CS   = 33;  // T_CS
+static constexpr int T_IRQ  = 36;  // T_IRQ
 
-// Calibração bruta (a gente mapeia com SWAP_XY)
+// Calibração da CYD (do tutorial)
 static constexpr int RAW_X_MIN = 200;
 static constexpr int RAW_X_MAX = 3700;
 static constexpr int RAW_Y_MIN = 240;
 static constexpr int RAW_Y_MAX = 3800;
 
-// Fonte padrão de UI
-static constexpr auto LGFX_FONT = &fonts::Font2;
+// RGB color conversion macro
+#define RGB(r,g,b) (((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3))
 
-// Cores base
+// Cores base (usando TFT_eSPI)
 #define COL_BG    TFT_BLACK
 #define COL_BAR   TFT_DARKGREY
 #define COL_TXT   TFT_WHITE
-// antigo: #define COL_UP  0x07E0   // verde puro, muito “aceso”
-// novo (verde escuro, bom contraste c/ texto preto):
 #define COL_UP    RGB(0,140,60)
-// mantém
-#define COL_DOWN  0xF800
-#define COL_UNK   0x8410
+#define COL_DOWN  TFT_RED
+#define COL_UNK   TFT_DARKGREY
 
 // Estados (compartilhado entre main/ui)
 enum Status : uint8_t { UNKNOWN=0, UP=1, DOWN=2 };
+
+// Target struct para network scanning
+struct Target {
+  const char* name;
+  const char* url;
+  Status  st;
+  uint16_t lat_ms;
+};
 
 // Info que desenhamos em cada tile
 struct TileInfo {
