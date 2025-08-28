@@ -65,7 +65,15 @@
 #define LV_MEM_CUSTOM          0
 #define LV_MEM_SIZE            (32U * 1024U)
 
-// Enable font loader
+// Enable font loader (LVGL 6.x)
 #define LV_USE_FONT_PLACEHOLDER 1
+
+// LVGL 6.x specific settings
+#define LV_USE_PERF_MONITOR    0
+#define LV_USE_LOG_LEVEL       1
+
+// LVGL 6.x compatibility
+#define LV_USE_ANIMATION        1
+#define LV_USE_TRANSITION       1
 
 #endif
