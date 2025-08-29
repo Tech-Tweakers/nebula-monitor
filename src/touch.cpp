@@ -51,7 +51,7 @@ bool Touch::touched() {
     TS_Point p = touchscreen->getPoint();
     
     // Very low pressure threshold for maximum sensitivity
-    if (p.z > 10) { // Ultra-low pressure threshold
+    if (p.z > 20) { // Ultra-low pressure threshold
       return true;
     }
   }

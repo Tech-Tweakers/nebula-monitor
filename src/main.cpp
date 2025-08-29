@@ -9,7 +9,7 @@
 
 // Network targets
 const Target targets[] = {
-  {"Proxmox HyperV", "http://192.168.1.128:8006/", UNKNOWN, 0},
+  {"Proxmox HV", "http://192.168.1.128:8006/", UNKNOWN, 0},
   {"Polaris API", "https://endangered-musician-bolt-berlin.trycloudflare.com", UNKNOWN, 0},
   {"Polaris INT", "https://ebfc52323306.ngrok-free.app", UNKNOWN, 0},
   {"Polaris WEB", "https://tech-tweakers.github.io/polaris-v2-web/", UNKNOWN, 0},
@@ -34,9 +34,73 @@ static bool scanner_initialized = false;
 
 // Footer update variables
 static unsigned long last_uptime_update = 0;
-static const unsigned long UPTIME_UPDATE_INTERVAL = 1000; // 1 second between updates
+static const unsigned long UPTIME_UPDATE_INTERVAL = 500; // 1 second between updates
 static unsigned long start_time = 0;
 static lv_obj_t* uptime_label_ref = nullptr; // Global reference for uptime label
+static lv_obj_t* footer_ref = nullptr; // Global reference for footer
+static bool footer_show_network = true; // Toggle state for footer
+
+// Footer long press variables
+static bool footer_pressed = false;
+static unsigned long footer_press_start = 0;
+static const unsigned long FOOTER_LONG_PRESS_TIME = 500; // 2 seconds for long press
+
+// Footer click callback
+void footer_click_cb(lv_event_t* e) {
+  Serial.println("[FOOTER] Callback chamado! Trocando estado...");
+  
+  footer_show_network = !footer_show_network; // Toggle state
+  
+  Serial.printf("[FOOTER] Novo estado: %s\n", footer_show_network ? "Rede" : "Status");
+  
+  if (footer_show_network) {
+    // Show network info
+    char network_info[50];
+    snprintf(network_info, sizeof(network_info), "WiFi: OK | IP: %s", WiFi.localIP().toString().c_str());
+    Serial.printf("[FOOTER] Mostrando rede: %s\n", network_info);
+    if (uptime_label_ref) {
+      lv_label_set_text(uptime_label_ref, network_info);
+      Serial.println("[FOOTER] Texto atualizado para rede!");
+    } else {
+      Serial.println("[FOOTER] ERRO: uptime_label_ref é NULL!");
+    }
+  } else {
+    // Show uptime and status
+    unsigned long uptime_seconds = (millis() - start_time) / 1000;
+    unsigned long hours = uptime_seconds / 3600;
+    unsigned long minutes = (uptime_seconds % 3600) / 60;
+    
+    // Count targets status
+    int targets_ok = 0;
+    int targets_fail = 0;
+    for (int i = 0; i < N_TARGETS; i++) {
+      if (ScanManager::getTargetStatus(i) == UP) {
+        targets_ok++;
+      } else {
+        targets_fail++;
+      }
+    }
+    
+    char status_info[50];
+    if (hours > 0) {
+      snprintf(status_info, sizeof(status_info), "UP: %02lu:%02lu | OK:%d FAIL:%d", hours, minutes, targets_ok, targets_fail);
+    } else {
+      snprintf(status_info, sizeof(status_info), "UP: %02lu:%02lu | OK:%d FAIL:%d", minutes, uptime_seconds % 60, targets_ok, targets_fail);
+    }
+    
+    Serial.printf("[FOOTER] Mostrando status: %s\n", status_info);
+    if (uptime_label_ref) {
+      lv_label_set_text(uptime_label_ref, status_info);
+      Serial.println("[FOOTER] Texto atualizado para status!");
+    } else {
+      Serial.println("[FOOTER] ERRO: uptime_label_ref é NULL!");
+    }
+  }
+  
+  // Force display refresh
+  lv_refr_now(lv_disp_get_default());
+  Serial.println("[FOOTER] Display forçado a atualizar!");
+}
 
 void setup() {
   Serial.begin(115200);
@@ -147,38 +211,38 @@ void setup() {
 
   // Create footer with flex layout - closer to the list
   lv_obj_t* footer = lv_obj_create(main_screen);
-  lv_obj_set_size(footer, 220, 40);
+  lv_obj_set_size(footer, 220, 32); // Reduced height for smaller appearance
   lv_obj_set_pos(footer, 10, 260); // Reduced margin
   lv_obj_set_style_bg_color(footer, lv_color_hex(0x333333), LV_PART_MAIN);
   lv_obj_set_style_border_width(footer, 0, LV_PART_MAIN);
   lv_obj_set_style_radius(footer, 6, LV_PART_MAIN);
-  lv_obj_set_style_pad_all(footer, 8, LV_PART_MAIN);
+  lv_obj_set_style_pad_all(footer, 6, LV_PART_MAIN); // Reduced padding for smaller appearance
   
-  // Enable flex layout for footer (horizontal)
+  // Make footer clickable
+  lv_obj_add_event_cb(footer, footer_click_cb, LV_EVENT_CLICKED, nullptr);
+  
+  // Enable flex layout for footer (horizontal) - left aligned
   lv_obj_set_flex_flow(footer, LV_FLEX_FLOW_ROW);
-  lv_obj_set_flex_align(footer, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+  lv_obj_set_flex_align(footer, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
   // WiFi status indicator
   lv_obj_t* wifi_indicator = lv_obj_create(footer);
-  lv_obj_set_size(wifi_indicator, 12, 12);
+  lv_obj_set_size(wifi_indicator, 10, 10); // Smaller indicator
   lv_obj_set_style_bg_color(wifi_indicator, lv_color_hex(0xFF00FF), LV_PART_MAIN); // Green when connected - cor inversa para display invertido
-  lv_obj_set_style_radius(wifi_indicator, 6, LV_PART_MAIN);
+  lv_obj_set_style_radius(wifi_indicator, 5, LV_PART_MAIN);
   lv_obj_set_style_border_width(wifi_indicator, 0, LV_PART_MAIN);
+  lv_obj_set_style_pad_right(wifi_indicator, 6, LV_PART_MAIN); // Space between indicator and text
 
-  // WiFi status text
-  lv_obj_t* wifi_text = lv_label_create(footer);
-  lv_label_set_text(wifi_text, "WiFi: OK");
-  lv_obj_set_style_text_color(wifi_text, lv_color_hex(0xCCCCCC), LV_PART_MAIN);
-  lv_obj_set_style_text_font(wifi_text, LV_FONT_DEFAULT, LV_PART_MAIN);
-
-  // Uptime
-  lv_obj_t* uptime_text = lv_label_create(footer);
-  lv_label_set_text(uptime_text, "UP: 00:00");
-  lv_obj_set_style_text_color(uptime_text, lv_color_hex(0xCCCCCC), LV_PART_MAIN);
-  lv_obj_set_style_text_font(uptime_text, LV_FONT_DEFAULT, LV_PART_MAIN);
+  // Main footer text (will toggle between network info and uptime/status)
+  lv_obj_t* footer_main_text = lv_label_create(footer);
+  lv_label_set_text(footer_main_text, "WiFi: OK | IP: 192.168.1.162");
+  lv_obj_set_style_text_color(footer_main_text, lv_color_hex(0xCCCCCC), LV_PART_MAIN);
+  lv_obj_set_style_text_font(footer_main_text, LV_FONT_DEFAULT, LV_PART_MAIN); // Default font
+  lv_obj_set_style_text_align(footer_main_text, LV_TEXT_ALIGN_LEFT, LV_PART_MAIN); // Left aligned text
   
-  // Store reference for dynamic updates
-  uptime_label_ref = uptime_text;
+  // Store references for dynamic updates
+  uptime_label_ref = footer_main_text;
+  footer_ref = footer;
 
   Serial.println("[MAIN] Setup completo! Interface pronta com footer!");
 }
@@ -222,7 +286,7 @@ void loop() {
           lv_label_set_text(latency_labels[i], latency_text);
           
           // Determine color based on latency threshold
-          if (latency < 1000) {
+          if (latency < 500) {
             // Green for good latency (< 1000ms)
             lv_obj_set_style_bg_color(status_labels[i], lv_color_hex(0xFF00FF), LV_PART_MAIN); // Verde (inverso)
             lv_obj_set_style_text_color(latency_labels[i], lv_color_hex(0xFFFFFF), LV_PART_MAIN); // Texto preto
@@ -230,7 +294,7 @@ void loop() {
             Serial.printf("[SCANNER] %s: %d ms (UP - Verde)\n", targets[i].name, latency);
           } else {
             // Orange for high latency (>= 1000ms)
-            lv_obj_set_style_bg_color(status_labels[i], lv_color_hex(0xFF8000), LV_PART_MAIN); // Laranja (cor diferente para não confundir)
+            lv_obj_set_style_bg_color(status_labels[i], lv_color_hex(0x0086ff), LV_PART_MAIN); // Laranja (cor diferente para não confundir)
             lv_obj_set_style_text_color(latency_labels[i], lv_color_hex(0x000000), LV_PART_MAIN); // Texto branco
             lv_obj_set_style_text_color(name_labels[i], lv_color_hex(0x000000), LV_PART_MAIN); // Nome branco
             Serial.printf("[SCANNER] %s: %d ms (UP - Laranja)\n", targets[i].name, latency);
@@ -259,27 +323,43 @@ void loop() {
       Serial.println("[SCANNER] Display atualizado!");
     }
     
-    // Update footer (uptime and WiFi status)
+    // Update footer based on current mode
     if (millis() - last_uptime_update >= UPTIME_UPDATE_INTERVAL) {
-      // Calculate uptime
-      unsigned long uptime_seconds = (millis() - start_time) / 1000;
-      unsigned long hours = uptime_seconds / 3600;
-      unsigned long minutes = (uptime_seconds % 3600) / 60;
-      unsigned long seconds = uptime_seconds % 60;
-      
-      // Update uptime text
-      char uptime_text[20];
-      if (hours > 0) {
-        snprintf(uptime_text, sizeof(uptime_text), "UP: %02lu:%02lu:%02lu", hours, minutes, seconds);
+      if (footer_show_network) {
+        // Update network info
+        char network_info[50];
+        snprintf(network_info, sizeof(network_info), "WiFi: OK | IP: %s", WiFi.localIP().toString().c_str());
+        if (uptime_label_ref) {
+          lv_label_set_text(uptime_label_ref, network_info);
+        }
       } else {
-        snprintf(uptime_text, sizeof(uptime_text), "UP: %02lu:%02lu", minutes, seconds);
+        // Update uptime and status info
+        unsigned long uptime_seconds = (millis() - start_time) / 1000;
+        unsigned long hours = uptime_seconds / 3600;
+        unsigned long minutes = (uptime_seconds % 3600) / 60;
+        
+        // Count targets status
+        int targets_ok = 0;
+        int targets_fail = 0;
+        for (int i = 0; i < N_TARGETS; i++) {
+          if (ScanManager::getTargetStatus(i) == UP) {
+            targets_ok++;
+          } else {
+            targets_fail++;
+          }
+        }
+        
+        char status_info[50];
+        if (hours > 0) {
+          snprintf(status_info, sizeof(status_info), "UP: %02lu:%02lu | OK:%d FAIL:%d", hours, minutes, targets_ok, targets_fail);
+        } else {
+          snprintf(status_info, sizeof(status_info), "UP: %02lu:%02lu | OK:%d FAIL:%d", minutes, uptime_seconds % 60, targets_ok, targets_fail);
+        }
+        
+        if (uptime_label_ref) {
+          lv_label_set_text(uptime_label_ref, status_info);
+        }
       }
-      
-      // Update uptime label using global reference
-      if (uptime_label_ref) {
-        lv_label_set_text(uptime_label_ref, uptime_text);
-      }
-      
       last_uptime_update = millis();
     }
   }
@@ -293,6 +373,60 @@ void loop() {
     Touch::mapRawToScreen(raw_x, raw_y, screen_x, screen_y);
     
     Serial.printf("[TOUCH] Touch detectado em (%d, %d)\n", screen_x, screen_y);
+    
+    // Check if footer was touched
+    if (footer_ref) {
+      lv_area_t footer_area;
+      lv_obj_get_coords(footer_ref, &footer_area);
+      
+      Serial.printf("[TOUCH] Footer area: (%d,%d) to (%d,%d)\n", 
+                   footer_area.x1, footer_area.y1, footer_area.x2, footer_area.y2);
+      
+      if (screen_x >= footer_area.x1 && screen_x < footer_area.x2 && 
+          screen_y >= footer_area.y1 && screen_y < footer_area.y2) {
+        
+        // Footer touched - start long press detection
+        if (!footer_pressed) {
+          footer_pressed = true;
+          footer_press_start = millis();
+          Serial.println("[TOUCH] FOOTER PRESSIONADO! Iniciando contagem de 2s...");
+          
+          // // Visual feedback - change footer color to indicate press
+          // lv_obj_set_style_bg_color(footer_ref, lv_color_hex(0x555555), LV_PART_MAIN);
+          // lv_refr_now(lv_disp_get_default());
+        }
+        
+        // Check if long press time reached
+        if (footer_pressed && (millis() - footer_press_start >= FOOTER_LONG_PRESS_TIME)) {
+          Serial.println("[TOUCH] PRESSÃO LONGA ATINGIDA! Executando toggle...");
+          
+          // Execute toggle
+          footer_click_cb(nullptr);
+          
+          // Reset press state
+          footer_pressed = false;
+          footer_press_start = 0;
+          
+          // // Restore original footer color
+          // lv_obj_set_style_bg_color(footer_ref, lv_color_hex(0x333333), LV_PART_MAIN);
+          // lv_refr_now(lv_disp_get_default());
+          
+          Serial.println("[TOUCH] Toggle executado e footer restaurado!");
+          return; // Exit early since footer was toggled
+        }
+      } else {
+        // Touch outside footer - reset press state
+        if (footer_pressed) {
+          footer_pressed = false;
+          footer_press_start = 0;
+          Serial.println("[TOUCH] Touch fora do footer - resetando pressão!");
+          
+          // Restore original footer color
+          lv_obj_set_style_bg_color(footer_ref, lv_color_hex(0x333333), LV_PART_MAIN);
+          lv_refr_now(lv_disp_get_default());
+        }
+      }
+    }
     
     // Check which status item was touched
     for (int i = 0; i < N_TARGETS; i++) {
