@@ -35,8 +35,9 @@ bool Touch::beginHSPI() {
   touchscreen->begin(*touchscreenSPI);
   touchscreen->setRotation(ROT);
   
-  Serial.printf("[TOUCH] Touchscreen inicializado - CS:%d IRQ:%d SCK:%d MISO:%d MOSI:%d (HSPI)\n", 
-                T_CS, T_IRQ, T_SCK, T_MISO, T_MOSI);
+  Serial.printf("[TOUCH] Touchscreen inicializado - CS:%d IRQ:%d MISO:%d MOSI:%d (HSPI)\n", 
+                T_CS, T_IRQ, T_MISO, T_MOSI);
+  Serial.println("[TOUCH] Configuração otimizada para máxima sensibilidade!");
   
   return true;
 }
@@ -44,9 +45,15 @@ bool Touch::beginHSPI() {
 bool Touch::touched() {
   if (!touchscreen) return false;
   
-  // Check if touchscreen was touched
-  if (touchscreen->tirqTouched() && touchscreen->touched()) {
-    return true;
+  // Check if touchscreen was touched with improved sensitivity
+  if (touchscreen->tirqTouched()) {
+    // Get touch point to check pressure
+    TS_Point p = touchscreen->getPoint();
+    
+    // Very low pressure threshold for maximum sensitivity
+    if (p.z > 10) { // Ultra-low pressure threshold
+      return true;
+    }
   }
   
   return false;
@@ -58,13 +65,18 @@ void Touch::readRaw(int16_t& x, int16_t& y, int16_t& z) {
     return;
   }
   
-  // Get touch point
-  TS_Point p = touchscreen->getPoint();
+  // Get touch point with averaging for better accuracy
+  TS_Point p1 = touchscreen->getPoint();
+  TS_Point p2 = touchscreen->getPoint();
+  TS_Point p3 = touchscreen->getPoint();
   
-  // Return raw values
-  x = p.x;
-  y = p.y;
-  z = p.z;
+  // Average multiple readings for better accuracy
+  x = (p1.x + p2.x + p3.x) / 3;
+  y = (p1.y + p2.y + p3.y) / 3;
+  z = (p1.z + p2.z + p3.z) / 3;
+  
+  // Debug pressure for sensitivity tuning
+  Serial.printf("[TOUCH] Pressure: %d (threshold: 10)\n", z);
 }
 
 void Touch::mapRawToScreen(int16_t rx, int16_t ry, int& sx, int& sy) {

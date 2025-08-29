@@ -20,6 +20,10 @@ static constexpr int RAW_X_MAX = 3700;
 static constexpr int RAW_Y_MIN = 240;
 static constexpr int RAW_Y_MAX = 3800;
 
+// WiFi credentials
+#define WIFI_SSID "Polaris"
+#define WIFI_PASS "55548502"
+
 // RGB color conversion macro
 #define RGB(r,g,b) (((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3))
 

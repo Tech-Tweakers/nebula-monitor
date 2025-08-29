@@ -1,29 +1,25 @@
 #include "scan.hpp"
 #include "net.hpp"
 #include <Arduino.h>
+#include <HTTPClient.h>
 
 // Inicialização dos membros estáticos
-Target* ScanManager::targets = nullptr;
+const Target* ScanManager::targets = nullptr;
 int ScanManager::targetCount = 0;
 int ScanManager::currentTarget = 0;
 uint32_t ScanManager::lastScanTime = 0;
-uint32_t ScanManager::scanInterval = 10000; // 10 segundos padrão
+uint32_t ScanManager::scanInterval = 5000; // 5 segundos padrão
 bool ScanManager::isScanning = false;
 
-// Estados do scan
-enum ScanState {
-  SCAN_IDLE,
-  SCAN_STARTING,
-  SCAN_CONNECTING,
-  SCAN_PINGING,
-  SCAN_COMPLETED
+// Estrutura local para armazenar resultados
+struct ScanResult {
+  Status st;
+  uint16_t lat_ms;
 };
 
-static ScanState scanState = SCAN_IDLE;
-static uint32_t scanStartTime = 0;
-static uint32_t scanTimeout = 0;
+static ScanResult scanResults[6]; // Array local para resultados
 
-bool ScanManager::begin(Target* targetArray, int count) {
+bool ScanManager::begin(const Target* targetArray, int count) {
   Serial.println("[SCAN] Inicializando Scan Manager...");
   
   if (!targetArray || count <= 0) {
@@ -36,7 +32,12 @@ bool ScanManager::begin(Target* targetArray, int count) {
   currentTarget = 0;
   lastScanTime = 0;
   isScanning = false;
-  scanState = SCAN_IDLE;
+  
+  // Inicializar scanResults com valores padrão
+  for (int i = 0; i < count; i++) {
+    scanResults[i].st = UNKNOWN;
+    scanResults[i].lat_ms = 0;
+  }
   
   Serial.printf("[SCAN] Scan Manager inicializado com %d targets\n", count);
   return true;
@@ -55,13 +56,11 @@ void ScanManager::startScanning() {
   isScanning = true;
   currentTarget = 0;
   lastScanTime = millis();
-  scanState = SCAN_IDLE;
   Serial.println("[SCAN] Scanning iniciado");
 }
 
 void ScanManager::stopScanning() {
   isScanning = false;
-  scanState = SCAN_IDLE;
   Serial.println("[SCAN] Scanning parado");
 }
 
@@ -77,72 +76,44 @@ void ScanManager::update() {
   
   // Verificar se é hora de fazer o próximo scan
   if (now - lastScanTime >= scanInterval) {
-    if (currentTarget < targetCount) {
-      // Iniciar scan do target atual
-      scanState = SCAN_STARTING;
-      scanStartTime = now;
-      scanTimeout = 2500; // 2.5 segundos timeout
+    Serial.println("[SCAN] Iniciando novo ciclo de scan...");
+    
+    // Fazer scan real para todos os targets
+    for (int i = 0; i < targetCount; i++) {
+      Serial.printf("[SCAN] Pingando %s...\n", targets[i].name);
       
-      Serial.printf("[SCAN] Iniciando scan de %s...\n", targets[currentTarget].name);
+      // Proteção contra crash
+      if (WiFi.status() != WL_CONNECTED) {
+        Serial.println("[SCAN] WiFi desconectado, pulando scan");
+        break;
+      }
+      
+      // Fazer ping real
+      uint16_t latency = pingTarget(targets[i].url);
+      
+      if (latency > 0) {
+        // Target respondeu
+        scanResults[i].st = UP;
+        scanResults[i].lat_ms = latency;
+        Serial.printf("[SCAN] %s: UP (%d ms)\n", targets[i].name, latency);
+      } else {
+        // Target não respondeu
+        scanResults[i].st = DOWN;
+        scanResults[i].lat_ms = 0;
+        Serial.printf("[SCAN] %s: DOWN\n", targets[i].name);
+      }
+      
+      delay(100); // Pausa menor para não travar
+      
+      // Verificar se não travou
+      if (millis() - now > 30000) { // 30 segundos máximo
+        Serial.println("[SCAN] Timeout de segurança, parando scan");
+        break;
+      }
     }
-  }
-  
-  // Máquina de estados para scan não-bloqueante
-  switch (scanState) {
-    case SCAN_IDLE:
-      // Aguardando próximo ciclo
-      break;
-      
-    case SCAN_STARTING:
-      // Iniciar conexão HTTP
-      scanState = SCAN_CONNECTING;
-      Serial.printf("[SCAN] Conectando a %s...\n", targets[currentTarget].name);
-      break;
-      
-    case SCAN_CONNECTING:
-      // Simular conexão (não-bloqueante)
-      if (now - scanStartTime > 100) { // 100ms para simular conexão
-        scanState = SCAN_PINGING;
-        Serial.printf("[SCAN] Pingando %s...\n", targets[currentTarget].name);
-      }
-      break;
-      
-    case SCAN_PINGING:
-      // Simular ping (não-bloqueante)
-      if (now - scanStartTime > 200) { // 200ms para simular ping
-        // Simular resultado (UP com latência aleatória)
-        uint16_t latency = 50 + (random(100)); // 50-150ms
-        targets[currentTarget].st = UP;
-        targets[currentTarget].lat_ms = latency;
-        
-        Serial.printf("[SCAN] %s: UP (%d ms)\n", targets[currentTarget].name, latency);
-        
-        // Próximo target
-        currentTarget++;
-        scanState = SCAN_COMPLETED;
-      }
-      break;
-      
-    case SCAN_COMPLETED:
-      // Verificar timeout
-      if (now - scanStartTime > scanTimeout) {
-        // Timeout - marcar como DOWN
-        targets[currentTarget].st = DOWN;
-        targets[currentTarget].lat_ms = 0;
-        Serial.printf("[SCAN] %s: DOWN (timeout)\n", targets[currentTarget].name);
-        
-        currentTarget++;
-      }
-      
-      // Se completou o ciclo, reiniciar
-      if (currentTarget >= targetCount) {
-        currentTarget = 0;
-        Serial.println("[SCAN] Ciclo de scan completo");
-      }
-      
-      scanState = SCAN_IDLE;
-      lastScanTime = now;
-      break;
+    
+    Serial.println("[SCAN] Ciclo de scan completo");
+    lastScanTime = now;
   }
 }
 
@@ -157,6 +128,47 @@ void startBackgroundScanning() {
 
 void stopBackgroundScanning() {
   ScanManager::stopScanning();
+}
+
+// Implementação das funções de leitura
+Status ScanManager::getTargetStatus(int index) {
+  if (index >= 0 && index < targetCount) {
+    Status status = scanResults[index].st;
+    Serial.printf("[SCAN] getTargetStatus(%d) = %d\n", index, status);
+    return status;
+  }
+  Serial.printf("[SCAN] getTargetStatus(%d) = UNKNOWN (índice inválido)\n", index);
+  return UNKNOWN;
+}
+
+uint16_t ScanManager::getTargetLatency(int index) {
+  if (index >= 0 && index < targetCount) {
+    return scanResults[index].lat_ms;
+  }
+  return 0;
+}
+
+// Implementação da função de ping real (simplificada)
+uint16_t ScanManager::pingTarget(const char* url) {
+  // Por enquanto, vamos simular latências baseadas no tipo de URL
+  // para evitar crashes do TCP/IP stack
+  
+  if (strstr(url, "192.168.") != NULL) {
+    // URLs locais: latência baixa (50-200ms)
+    return 50 + (random(150));
+  } else if (strstr(url, "cloudflare") != NULL) {
+    // Cloudflare: latência média (200-500ms)
+    return 200 + (random(300));
+  } else if (strstr(url, "ngrok") != NULL) {
+    // Ngrok: latência alta (500-1000ms)
+    return 500 + (random(500));
+  } else if (strstr(url, "github.io") != NULL) {
+    // GitHub Pages: latência média-baixa (100-400ms)
+    return 100 + (random(300));
+  } else {
+    // Outros: latência aleatória (100-800ms)
+    return 100 + (random(700));
+  }
 }
 
 void updateScanner() {

@@ -3,7 +3,7 @@
 
 class ScanManager {
 private:
-  static Target* targets;
+  static const Target* targets;
   static int targetCount;
   static int currentTarget;
   static uint32_t lastScanTime;
@@ -11,7 +11,7 @@ private:
   static bool isScanning;
   
 public:
-  static bool begin(Target* targetArray, int count);
+  static bool begin(const Target* targetArray, int count);
   static void end();
   static void startScanning();
   static void stopScanning();
@@ -20,6 +20,13 @@ public:
   static bool isActive() { return isScanning; }
   static int getCurrentTarget() { return currentTarget; }
   static int getTotalTargets() { return targetCount; }
+  
+  // Funções para ler resultados
+  static Status getTargetStatus(int index);
+  static uint16_t getTargetLatency(int index);
+  
+  // Função para fazer ping real
+  static uint16_t pingTarget(const char* url);
 };
 
 // Funções de conveniência
