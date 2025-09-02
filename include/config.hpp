@@ -38,10 +38,15 @@ static constexpr int RAW_Y_MAX = 3800;
 // Estados (compartilhado entre main/ui)
 enum Status : uint8_t { UNKNOWN=0, UP=1, DOWN=2 };
 
+// Tipos de monitoramento
+enum MonitorType : uint8_t { PING=0, HEALTH_CHECK=1 };
+
 // Target struct para network scanning
 struct Target {
   const char* name;
   const char* url;
+  const char* health_endpoint;  // Endpoint para health check (opcional)
+  MonitorType monitor_type;     // Tipo de monitoramento
   Status  st;
   uint16_t lat_ms;
 };

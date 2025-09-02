@@ -27,6 +27,9 @@ public:
   
   // Função para fazer ping real
   static uint16_t pingTarget(const char* url);
+  
+  // Função para health check via API
+  static uint16_t healthCheckTarget(const char* base_url, const char* health_endpoint);
 };
 
 // Funções de conveniência

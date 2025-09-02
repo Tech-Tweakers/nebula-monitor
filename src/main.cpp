@@ -9,12 +9,12 @@
 
 // Network targets
 const Target targets[] = {
-  {"Proxmox HV", "http://192.168.1.128:8006/", UNKNOWN, 0},
-  {"Polaris API", "https://endangered-musician-bolt-berlin.trycloudflare.com", UNKNOWN, 0},
-  {"Polaris INT", "https://ebfc52323306.ngrok-free.app", UNKNOWN, 0},
-  {"Polaris WEB", "https://tech-tweakers.github.io/polaris-v2-web/", UNKNOWN, 0},
-  {"Router #1", "http://192.168.1.1", UNKNOWN, 0},
-  {"Router #2", "https://192.168.1.172", UNKNOWN, 0}
+  {"Proxmox HV", "http://192.168.1.128:8006/", nullptr, PING, UNKNOWN, 0},
+  {"Router #1", "http://192.168.1.1", nullptr, PING, UNKNOWN, 0},
+  {"Router #2", "https://192.168.1.172", nullptr, PING, UNKNOWN, 0},
+  {"Polaris API", "https://pet-chem-independence-australia.trycloudflare.com", "/health", HEALTH_CHECK, UNKNOWN, 0},
+  {"Polaris INT", "https://ebfc52323306.ngrok-free.app", "/health", HEALTH_CHECK, UNKNOWN, 0},
+  {"Polaris WEB", "https://tech-tweakers.github.io/polaris-v2-web/", "/health", HEALTH_CHECK, UNKNOWN, 0}
 };
 
 const int N_TARGETS = sizeof(targets) / sizeof(targets[0]);
@@ -155,7 +155,7 @@ void setup() {
 
   // Create title label
   title_label = lv_label_create(title_bar);
-  lv_label_set_text(title_label, "Nebula Monitor v2.0");
+  lv_label_set_text(title_label, "Nebula Monitor v2.1");
   lv_obj_set_style_text_color(title_label, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
   lv_obj_set_style_text_font(title_label, LV_FONT_DEFAULT, LV_PART_MAIN);
   lv_obj_center(title_label);
@@ -281,35 +281,37 @@ void loop() {
         Serial.printf("[FRONTEND] Target %d: Status=%d, Latency=%d\n", i, status, latency);
         
         if (status == UP && latency > 0) {
-          char latency_text[20];
-          snprintf(latency_text, sizeof(latency_text), "%d ms", latency);
+          char latency_text[30];
+          const char* type_text = targets[i].monitor_type == HEALTH_CHECK ? "OK" : "ms";
+          snprintf(latency_text, sizeof(latency_text), "%d %s", latency, type_text);
           lv_label_set_text(latency_labels[i], latency_text);
           
           // Determine color based on latency threshold
           if (latency < 500) {
-            // Green for good latency (< 1000ms)
+            // Green for good latency (< 500ms)
             lv_obj_set_style_bg_color(status_labels[i], lv_color_hex(0xFF00FF), LV_PART_MAIN); // Verde (inverso)
-            lv_obj_set_style_text_color(latency_labels[i], lv_color_hex(0xFFFFFF), LV_PART_MAIN); // Texto preto
-            lv_obj_set_style_text_color(name_labels[i], lv_color_hex(0xFFFFFF), LV_PART_MAIN); // Nome preto
-            Serial.printf("[SCANNER] %s: %d ms (UP - Verde)\n", targets[i].name, latency);
+            lv_obj_set_style_text_color(latency_labels[i], lv_color_hex(0xFFFFFF), LV_PART_MAIN); // Texto branco
+            lv_obj_set_style_text_color(name_labels[i], lv_color_hex(0xFFFFFF), LV_PART_MAIN); // Nome branco
+            Serial.printf("[SCANNER] %s: %d %s (UP - Verde)\n", targets[i].name, latency, type_text);
           } else {
-            // Orange for high latency (>= 1000ms)
-            lv_obj_set_style_bg_color(status_labels[i], lv_color_hex(0x0086ff), LV_PART_MAIN); // Laranja (cor diferente para não confundir)
-            lv_obj_set_style_text_color(latency_labels[i], lv_color_hex(0x000000), LV_PART_MAIN); // Texto branco
-            lv_obj_set_style_text_color(name_labels[i], lv_color_hex(0x000000), LV_PART_MAIN); // Nome branco
-            Serial.printf("[SCANNER] %s: %d ms (UP - Laranja)\n", targets[i].name, latency);
+            // Blue for high latency (>= 500ms)
+            lv_obj_set_style_bg_color(status_labels[i], lv_color_hex(0x0086ff), LV_PART_MAIN); // Azul (cor diferente para não confundir)
+            lv_obj_set_style_text_color(latency_labels[i], lv_color_hex(0x000000), LV_PART_MAIN); // Texto preto
+            lv_obj_set_style_text_color(name_labels[i], lv_color_hex(0x000000), LV_PART_MAIN); // Nome preto
+            Serial.printf("[SCANNER] %s: %d %s (UP - Azul)\n", targets[i].name, latency, type_text);
           }
         } else {
-          lv_label_set_text(latency_labels[i], "DOWN");
+          const char* down_text = targets[i].monitor_type == HEALTH_CHECK ? "HEALTH FAIL" : "DOWN";
+          lv_label_set_text(latency_labels[i], down_text);
           
           // Update status color (red for failure) - usando cor inversa para display invertido
           lv_obj_set_style_bg_color(status_labels[i], lv_color_hex(0x00FFFF), LV_PART_MAIN);
           
-          // Texto branco para fundo vermelho (melhor legibilidade) - usando cor inversa para display invertido
+          // Texto preto para fundo vermelho (melhor legibilidade) - usando cor inversa para display invertido
           lv_obj_set_style_text_color(latency_labels[i], lv_color_hex(0x000000), LV_PART_MAIN);
           lv_obj_set_style_text_color(name_labels[i], lv_color_hex(0x000000), LV_PART_MAIN);
           
-          Serial.printf("[SCANNER] %s: DOWN\n", targets[i].name);
+          Serial.printf("[SCANNER] %s: %s\n", targets[i].name, down_text);
         }
         
         // Force refresh of the item

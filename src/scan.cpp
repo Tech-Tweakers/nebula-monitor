@@ -80,7 +80,9 @@ void ScanManager::update() {
     
     // Fazer scan real para todos os targets
     for (int i = 0; i < targetCount; i++) {
-      Serial.printf("[SCAN] Pingando %s...\n", targets[i].name);
+      Serial.printf("[SCAN] Verificando %s (tipo: %s)...\n", 
+                   targets[i].name, 
+                   targets[i].monitor_type == HEALTH_CHECK ? "HEALTH_CHECK" : "PING");
       
       // Proteção contra crash
       if (WiFi.status() != WL_CONNECTED) {
@@ -88,19 +90,31 @@ void ScanManager::update() {
         break;
       }
       
-      // Fazer ping real
-      uint16_t latency = pingTarget(targets[i].url);
+      uint16_t latency = 0;
+      
+      // Escolher tipo de verificação baseado na configuração
+      if (targets[i].monitor_type == HEALTH_CHECK) {
+        // Health check via API endpoint
+        latency = healthCheckTarget(targets[i].url, targets[i].health_endpoint);
+      } else {
+        // Ping simples
+        latency = pingTarget(targets[i].url);
+      }
       
       if (latency > 0) {
         // Target respondeu
         scanResults[i].st = UP;
         scanResults[i].lat_ms = latency;
-        Serial.printf("[SCAN] %s: UP (%d ms)\n", targets[i].name, latency);
+        Serial.printf("[SCAN] %s: UP (%d ms) - %s\n", 
+                     targets[i].name, latency,
+                     targets[i].monitor_type == HEALTH_CHECK ? "Health OK" : "Ping OK");
       } else {
         // Target não respondeu
         scanResults[i].st = DOWN;
         scanResults[i].lat_ms = 0;
-        Serial.printf("[SCAN] %s: DOWN\n", targets[i].name);
+        Serial.printf("[SCAN] %s: DOWN - %s\n", 
+                     targets[i].name,
+                     targets[i].monitor_type == HEALTH_CHECK ? "Health FAIL" : "Ping FAIL");
       }
       
       delay(100); // Pausa menor para não travar
@@ -148,26 +162,38 @@ uint16_t ScanManager::getTargetLatency(int index) {
   return 0;
 }
 
-// Implementação da função de ping real (simplificada)
+// Implementação da função de ping real
 uint16_t ScanManager::pingTarget(const char* url) {
-  // Por enquanto, vamos simular latências baseadas no tipo de URL
-  // para evitar crashes do TCP/IP stack
+  // Usar a função httpPing do Net para fazer ping real
+  return Net::httpPing(url, 5000); // 5 segundos de timeout
+}
+
+// Nova função para health check via API
+uint16_t ScanManager::healthCheckTarget(const char* base_url, const char* health_endpoint) {
+  if (!health_endpoint) {
+    return 0; // Sem endpoint de health, retorna 0 (DOWN)
+  }
   
-  if (strstr(url, "192.168.") != NULL) {
-    // URLs locais: latência baixa (50-200ms)
-    return 50 + (random(150));
-  } else if (strstr(url, "cloudflare") != NULL) {
-    // Cloudflare: latência média (200-500ms)
-    return 200 + (random(300));
-  } else if (strstr(url, "ngrok") != NULL) {
-    // Ngrok: latência alta (500-1000ms)
-    return 500 + (random(500));
-  } else if (strstr(url, "github.io") != NULL) {
-    // GitHub Pages: latência média-baixa (100-400ms)
-    return 100 + (random(300));
+  // Construir URL completa
+  String full_url = String(base_url);
+  if (full_url.endsWith("/") && health_endpoint[0] == '/') {
+    full_url = full_url.substring(0, full_url.length() - 1); // Remove trailing slash
+  } else if (!full_url.endsWith("/") && health_endpoint[0] != '/') {
+    full_url += "/"; // Adiciona slash se necessário
+  }
+  full_url += health_endpoint;
+  
+  Serial.printf("[HEALTH] Verificando health endpoint: %s\n", full_url.c_str());
+  
+  // Fazer requisição HTTP para o health endpoint
+  uint16_t latency = Net::httpPing(full_url.c_str(), 7000); // 7 segundos para health checks
+  
+  if (latency > 0) {
+    Serial.printf("[HEALTH] Health check OK: %d ms\n", latency);
+    return latency;
   } else {
-    // Outros: latência aleatória (100-800ms)
-    return 100 + (random(700));
+    Serial.printf("[HEALTH] Health check FAILED\n");
+    return 0;
   }
 }
 
