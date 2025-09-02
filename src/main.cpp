@@ -293,7 +293,7 @@ void footer_click_cb(lv_event_t* e) {
 
 void setup() {
   Serial.begin(115200);
-  LOGLN("[MAIN] Iniciando Nebula Monitor v2.2...");
+  LOGLN("[MAIN] Iniciando Nebula Monitor v2.3...");
   
   // Inicializar ConfigManager
   Serial.println("[MAIN] Inicializando ConfigManager...");
@@ -385,7 +385,7 @@ void setup() {
 
   // Create title label
   title_label = lv_label_create(title_bar);
-  lv_label_set_text(title_label, "Nebula Monitor v2.2");
+  lv_label_set_text(title_label, "Nebula Monitor v2.3");
   lv_obj_set_style_text_color(title_label, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
   lv_obj_set_style_text_font(title_label, LV_FONT_DEFAULT, LV_PART_MAIN);
   lv_obj_center(title_label);
