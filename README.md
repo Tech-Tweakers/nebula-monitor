@@ -277,8 +277,8 @@ const Target targets[] = {
 #### Bot Token and Chat ID
 ```cpp
 // In include/config.hpp
-#define TELEGRAM_BOT_TOKEN "8160557136:AAFvJf0wYywnzyoVWPG8AU1GZrWH9Kdg6yY"
-#define TELEGRAM_CHAT_ID "6743862062"
+#define TELEGRAM_BOT_TOKEN "884651896:AAFvJAOsuijOIAJSoIJASOjWH9Kdg6yY"
+#define TELEGRAM_CHAT_ID "984651356"
 #define TELEGRAM_ENABLED true
 ```
 

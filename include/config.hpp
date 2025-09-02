@@ -78,7 +78,7 @@ struct AlertState {
 #define ALERT_RECOVERY_COOLDOWN_MS 60000  // 1 minuto para alerta de recuperação
 
 // Configurações de debug
-#define DEBUG_LOGS_ENABLED true   // true = logs ativos, false = logs desabilitados
+#define DEBUG_LOGS_ENABLED false  // true = logs ativos, false = logs desabilitados
 #define TOUCH_LOGS_ENABLED false  // true = logs de touch ativos, false = logs de touch desabilitados
 
 // Macro para logs condicionais

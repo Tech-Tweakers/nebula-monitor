@@ -57,21 +57,16 @@ void updateScanStatusIndicator() {
   if (wifi_indicator_ref) {
     bool isScanning = ScanManager::isActive();
     bool isTelegramSending = TelegramAlerts::isSendingMessage();
-    DEBUG_LOGF("[MAIN] updateScanStatusIndicator: isScanning=%s, isTelegramSending=%s\n", 
-               isScanning ? "true" : "false", isTelegramSending ? "true" : "false");
     
     if (isTelegramSending) {
       // Red when sending Telegram messages
       lv_obj_set_style_bg_color(wifi_indicator_ref, lv_color_hex(0x0000FF), LV_PART_MAIN); // Red (inverted)
-      DEBUG_LOGLN("[MAIN] Bolinha: VERMELHA (sending Telegram)");
     } else if (isScanning) {
       // Orange when scanning (touch may be slow)
       lv_obj_set_style_bg_color(wifi_indicator_ref, lv_color_hex(0x00FFFF), LV_PART_MAIN); // Orange (inverted)
-      DEBUG_LOGLN("[MAIN] Bolinha: LARANJA (scanning)");
     } else {
       // Green when free (touch responsive)
       lv_obj_set_style_bg_color(wifi_indicator_ref, lv_color_hex(0xFF00FF), LV_PART_MAIN); // Green (inverted)
-      DEBUG_LOGLN("[MAIN] Bolinha: VERDE (idle)");
     }
   }
 }
