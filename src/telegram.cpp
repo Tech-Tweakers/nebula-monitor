@@ -53,27 +53,7 @@ bool TelegramAlerts::begin() {
   return true;
 }
 
-void TelegramAlerts::end() {
-  isEnabled = false;
-  botToken = "";
-  chatId = "";
-  Serial.println("[TELEGRAM] Sistema de alertas finalizado");
-}
-
-void TelegramAlerts::setBotToken(const char* token) {
-  botToken = String(token);
-  Serial.printf("[TELEGRAM] Token atualizado: %s\n", botToken.substring(0, 10).c_str());
-}
-
-void TelegramAlerts::setChatId(const char* id) {
-  chatId = String(id);
-  Serial.printf("[TELEGRAM] Chat ID atualizado: %s\n", chatId.c_str());
-}
-
-void TelegramAlerts::enable(bool enabled) {
-  isEnabled = enabled;
-  Serial.printf("[TELEGRAM] Alertas %s\n", enabled ? "habilitados" : "desabilitados");
-}
+// Funções removidas: end(), setBotToken(), setChatId(), enable() - não utilizadas
 
 void TelegramAlerts::updateTargetStatus(int targetIndex, Status newStatus, uint16_t latency) {
   if (!isActive() || targetIndex < 0 || targetIndex >= 6) {
@@ -228,7 +208,6 @@ String TelegramAlerts::formatAlertMessage(const char* targetName, Status status,
     message = "🟢 *ONLINE* - " + String(targetName) + "\n\n";
     message += "✅ *" + String(targetName) + "* está funcionando novamente!\n";
     message += "⏱️ Latência: " + String(latency) + " ms\n";
-    message += "🕐 " + formatTime(millis() / 1000) + " de uptime\n";
     if (totalDowntime > 0) {
       message += "⏰ Downtime total: " + formatTime(totalDowntime) + "\n";
     }
@@ -341,11 +320,18 @@ int TelegramAlerts::getFailureCount(int targetIndex) {
   return alertStates[targetIndex].failure_count;
 }
 
-void TelegramAlerts::resetFailureCount(int targetIndex) {
-  if (targetIndex < 0 || targetIndex >= 6) return;
-  alertStates[targetIndex].failure_count = 0;
-  alertStates[targetIndex].alert_sent = false;
-  Serial.printf("[TELEGRAM] Contador de falhas resetado para target %d\n", targetIndex);
+// Função removida: resetFailureCount() - não utilizada
+
+bool TelegramAlerts::hasActiveAlerts() {
+  if (!isActive()) return false;
+  
+  // Verificar se há pelo menos um target com alerta ativo
+  for (int i = 0; i < 6; i++) {
+    if (alertStates[i].alert_sent) {
+      return true; // Há pelo menos um alerta ativo
+    }
+  }
+  return false; // Nenhum alerta ativo
 }
 
 // Funções de conveniência

@@ -1,6 +1,6 @@
-# 🌌 Nebula Monitor v2.2
+# 🌌 Nebula Monitor v2.3
 
-> **ESP32 TFT Network Monitor Dashboard** - A comprehensive network monitoring solution with Telegram alerts, hybrid monitoring, and intelligent touch interface
+> **ESP32 TFT Network Monitor Dashboard** - A comprehensive network monitoring solution with external configuration, Telegram alerts, hybrid monitoring, and intelligent touch interface
 
 [![PlatformIO](https://img.shields.io/badge/PlatformIO-ESP32-blue.svg)](https://platformio.org/)
 [![LVGL](https://img.shields.io/badge/LVGL-8.3.11-green.svg)](https://lvgl.io/)
@@ -31,28 +31,39 @@
 
 ## 🎯 Overview
 
-**Nebula Monitor v2.2** is a sophisticated network monitoring dashboard designed for ESP32-based TFT displays. It provides real-time monitoring of network services, servers, and endpoints with an intuitive touch interface powered by LVGL, complete with Telegram alert system and hybrid monitoring capabilities.
+**Nebula Monitor v2.3** is a sophisticated network monitoring dashboard designed for ESP32-based TFT displays. It provides real-time monitoring of network services, servers, and endpoints with an intuitive touch interface powered by LVGL, complete with external configuration management, Telegram alert system, and hybrid monitoring capabilities.
 
 ### 📍 Repository Information
 - **GitHub**: [Tech-Tweakers/nebula-monitor](https://github.com/Tech-Tweakers/nebula-monitor)
 - **Organization**: [Tech-Tweakers](https://github.com/Tech-Tweakers)
 - **License**: MIT License
 - **Status**: Active Development
-- **Current Version**: v2.2
+- **Current Version**: v2.3
 - **Releases**: [View Releases](https://github.com/Tech-Tweakers/nebula-monitor/releases)
 
 ### 🎪 Key Highlights
 
+- **📁 External Configuration**: All settings managed via `config.env` file on SPIFFS
 - **🚨 Telegram Alert System**: Real-time notifications for service outages and recoveries
 - **🔄 Hybrid Monitoring**: PING for basic connectivity + Health Check for API endpoints
 - **📊 Intelligent Footer**: 5 modes of system information with compact display
-- **🎯 Visual Scan Indicator**: Bolinha verde/vermelha shows scan status and touch responsiveness
+- **🎯 Visual Scan Indicator**: Bolinha verde/vermelha/amarela shows scan status and alerts
 - **⚡ Performance Optimized**: 30s scan intervals, conditional logging, touch optimized
 - **🎮 Touch Interface**: Interactive LVGL-based UI with responsive touch controls
 - **🌐 WiFi Management**: Automatic connection and reconnection handling
 - **📈 Uptime Tracking**: System uptime and service statistics
+- **🔧 Runtime Configuration**: Debug settings and monitoring parameters configurable at runtime
 
 ## ✨ Features
+
+### 📁 External Configuration System
+- **SPIFFS Integration**: All configuration stored in `data/config.env` file
+- **Runtime Configuration**: No need to recompile for configuration changes
+- **Comprehensive Settings**: WiFi, Telegram, targets, display, touch, and debug settings
+- **Easy Management**: Simple key-value format for all configuration parameters
+- **Fallback Support**: Hardcoded defaults if configuration file is missing
+- **Dynamic Loading**: Targets loaded dynamically from configuration file
+- **Memory Efficient**: Uses `strdup()` for dynamic string allocation
 
 ### 🚨 Telegram Alert System
 - **Real-time Notifications**: Instant alerts when services go down or recover
@@ -207,40 +218,43 @@ pip install platformio
 # Download from: https://platformio.org/platformio-ide
 ```
 
-### 3️⃣ Configure WiFi
-Edit `include/config.hpp`:
-```cpp
-#define WIFI_SSID "YourWiFiName"
-#define WIFI_PASS "YourWiFiPassword"
+### 3️⃣ Configure System Settings
+Edit `data/config.env` file:
+```env
+# WiFi Configuration
+WIFI_SSID=YourWiFiName
+WIFI_PASS=YourWiFiPassword
+
+# Telegram Configuration
+TELEGRAM_BOT_TOKEN=your_bot_token_here
+TELEGRAM_CHAT_ID=your_chat_id_here
+TELEGRAM_ENABLED=true
+
+# Alert Settings
+MAX_FAILURES_BEFORE_ALERT=3
+ALERT_COOLDOWN_MS=300000
+ALERT_RECOVERY_COOLDOWN_MS=60000
+
+# Debug Settings
+DEBUG_LOGS_ENABLED=false
+TOUCH_LOGS_ENABLED=false
+ALL_LOGS_ENABLED=false
+
+# Network Targets (Format: NAME|URL|HEALTH_ENDPOINT|MONITOR_TYPE)
+TARGET_1=Proxmox HV|http://192.168.1.128:8006/||PING
+TARGET_2=Router #1|http://192.168.1.1||PING
+TARGET_3=Router #2|https://192.168.1.172||PING
+TARGET_4=Polaris API|https://api.example.com|/health|HEALTH_CHECK
+TARGET_5=Polaris INT|http://integration.example.com|/health|HEALTH_CHECK
+TARGET_6=Polaris WEB|https://web.example.com|/#/health|HEALTH_CHECK
 ```
 
-### 4️⃣ Configure Telegram Alerts (Optional)
-Edit `include/config.hpp`:
-```cpp
-#define TELEGRAM_BOT_TOKEN "your_bot_token_here"
-#define TELEGRAM_CHAT_ID "your_chat_id_here"
-#define TELEGRAM_ENABLED true
-```
-
-### 5️⃣ Configure Network Targets
-Edit `src/main.cpp` to add your monitoring targets:
-```cpp
-const Target targets[] = {
-  {"Proxmox HV", "http://192.168.1.128:8006/", nullptr, PING, UNKNOWN, 0},
-  {"Router #1", "http://192.168.1.1", nullptr, PING, UNKNOWN, 0},
-  {"Router #2", "https://192.168.1.172", nullptr, PING, UNKNOWN, 0},
-  {"Polaris API", "https://api.example.com", "/health", HEALTH_CHECK, UNKNOWN, 0},
-  {"Polaris INT", "http://integration.example.com", "/health", HEALTH_CHECK, UNKNOWN, 0},
-  {"Polaris WEB", "https://web.example.com", "health", HEALTH_CHECK, UNKNOWN, 0}
-};
-```
-
-### 6️⃣ Build and Upload
+### 4️⃣ Upload Configuration and Firmware
 ```bash
-# Build the project
-pio run
+# Upload configuration file to SPIFFS
+pio run --target uploadfs
 
-# Upload to ESP32
+# Build and upload firmware
 pio run --target upload
 
 # Monitor serial output
@@ -249,45 +263,68 @@ pio device monitor
 
 ## ⚙️ Configuration
 
-### 🌐 Network Settings
+### 📁 External Configuration System
 
-#### WiFi Configuration
-```cpp
-// In include/config.hpp
-#define WIFI_SSID "YourNetworkName"
-#define WIFI_PASS "YourPassword"
+All configuration is now managed through the `data/config.env` file, which is uploaded to the ESP32's SPIFFS filesystem. This allows for runtime configuration changes without recompiling the firmware.
+
+#### Configuration File Structure
+```env
+# WiFi Settings
+WIFI_SSID=YourNetworkName
+WIFI_PASS=YourPassword
+
+# Telegram Bot Configuration
+TELEGRAM_BOT_TOKEN=your_bot_token_here
+TELEGRAM_CHAT_ID=your_chat_id_here
+TELEGRAM_ENABLED=true
+
+# Alert Configuration
+MAX_FAILURES_BEFORE_ALERT=3
+ALERT_COOLDOWN_MS=300000
+ALERT_RECOVERY_COOLDOWN_MS=60000
+
+# Debug Settings (Runtime Configurable)
+DEBUG_LOGS_ENABLED=false
+TOUCH_LOGS_ENABLED=false
+ALL_LOGS_ENABLED=false
+
+# Display Settings
+DISPLAY_ROTATION=0
+BACKLIGHT_PIN=27
+
+# Touch Settings
+TOUCH_SCK_PIN=14
+TOUCH_MOSI_PIN=13
+TOUCH_MISO_PIN=12
+TOUCH_CS_PIN=33
+TOUCH_IRQ_PIN=36
+TOUCH_X_MIN=200
+TOUCH_X_MAX=3700
+TOUCH_Y_MIN=240
+TOUCH_Y_MAX=3800
+
+# Scan Settings
+SCAN_INTERVAL_MS=30000
+TOUCH_FILTER_MS=500
+HTTP_TIMEOUT_MS=5000
+
+# Network Targets (Format: NAME|URL|HEALTH_ENDPOINT|MONITOR_TYPE)
+TARGET_1=Proxmox HV|http://192.168.1.128:8006/||PING
+TARGET_2=Router #1|http://192.168.1.1||PING
+TARGET_3=Router #2|https://192.168.1.172||PING
+TARGET_4=Polaris API|https://api.example.com|/health|HEALTH_CHECK
+TARGET_5=Polaris INT|http://integration.example.com|/health|HEALTH_CHECK
+TARGET_6=Polaris WEB|https://web.example.com|/#/health|HEALTH_CHECK
 ```
 
-#### Target Configuration
-```cpp
-// In src/main.cpp
-const Target targets[] = {
-  {"Display Name", "http://target-url", "/health", HEALTH_CHECK, UNKNOWN, 0},
-  // name: Display name in UI
-  // url: Full URL to monitor
-  // health_endpoint: Health check endpoint (nullptr for PING)
-  // monitor_type: PING or HEALTH_CHECK
-  // st: Initial status (UNKNOWN)
-  // lat_ms: Initial latency (0)
-};
+#### Target Configuration Format
 ```
-
-### 🚨 Telegram Configuration
-
-#### Bot Token and Chat ID
-```cpp
-// In include/config.hpp
-#define TELEGRAM_BOT_TOKEN "884651896:AAFvJAOsuijOIAJSoIJASOjWH9Kdg6yY"
-#define TELEGRAM_CHAT_ID "984651356"
-#define TELEGRAM_ENABLED true
+TARGET_N=NAME|URL|HEALTH_ENDPOINT|MONITOR_TYPE
 ```
-
-#### Alert Thresholds
-```cpp
-#define MAX_FAILURES_BEFORE_ALERT 3        // Failures before alert
-#define ALERT_COOLDOWN_MS 300000           // 5 minutes between alerts
-#define ALERT_RECOVERY_COOLDOWN_MS 60000   // 1 minute for recovery alerts
-```
+- **NAME**: Display name in the UI
+- **URL**: Full URL to monitor (http:// or https://)
+- **HEALTH_ENDPOINT**: Health check endpoint path (empty for PING)
+- **MONITOR_TYPE**: `PING` or `HEALTH_CHECK`
 
 ### 🎨 Display Settings
 
@@ -383,6 +420,7 @@ This project uses a **color-inverted display** (ST7789 with `TFT_INVERSION_ON=1`
 #### Visual Scan Indicator
 - **🟢 Green Bolinha**: System free, touch responsive
 - **🔴 Red Bolinha**: Scan active, touch may be slow
+- **🟡 Yellow Bolinha**: Active alerts present, attention needed
 
 ### 📊 Status Indicators
 
@@ -528,23 +566,27 @@ The project provides comprehensive debug logging:
 ```
 nebula-monitor/
 ├── 📁 include/                 # Header files
-│   ├── config.hpp             # Configuration constants
+│   ├── config.hpp             # Configuration constants and runtime settings
+│   ├── config_manager.hpp     # **NEW** - External configuration manager
 │   ├── display.hpp            # Display manager interface
 │   ├── lv_conf.h              # LVGL configuration
 │   ├── net.hpp                # Network operations interface
 │   ├── scan.hpp               # Scanner interface
-│   ├── telegram.hpp           # **NEW** - Telegram alerts interface
+│   ├── telegram.hpp           # Telegram alerts interface
 │   └── touch.hpp              # Touch input interface
 ├── 📁 src/                     # Source files
-│   ├── main.cpp               # Main application
+│   ├── main.cpp               # Main application with external config integration
+│   ├── config_manager.cpp     # **NEW** - Configuration manager implementation
 │   ├── display.cpp            # Display implementation
 │   ├── net.cpp                # Network implementation
 │   ├── scan.cpp               # Scanner implementation
-│   ├── telegram.cpp           # **NEW** - Telegram alerts implementation
+│   ├── telegram.cpp           # Telegram alerts implementation
 │   └── touch.cpp              # Touch implementation
+├── 📁 data/                    # **NEW** - SPIFFS data files
+│   └── config.env             # **NEW** - External configuration file
 ├── 📁 test/                    # Test files
 │   └── README                 # Test documentation
-├── 📄 platformio.ini          # PlatformIO configuration
+├── 📄 platformio.ini          # PlatformIO configuration with SPIFFS support
 ├── 📄 COLOR_MAPPING.md        # Color system documentation
 └── 📄 README.md               # This file
 ```
@@ -553,14 +595,26 @@ nebula-monitor/
 
 ### ❌ Common Problems
 
+#### Configuration Issues
+```
+Problem: Configuration not loading or "black screen"
+Solution:
+1. Ensure config.env file exists in data/ directory
+2. Upload SPIFFS filesystem: pio run --target uploadfs
+3. Check config.env file format (no spaces around =)
+4. Verify all required parameters are present
+5. Check serial output for configuration loading errors
+```
+
 #### WiFi Issues
 ```
 Problem: WiFi connection fails
 Solution: 
-1. Check SSID/password in config.hpp
+1. Check SSID/password in data/config.env
 2. Verify WiFi network is 2.4GHz (ESP32 doesn't support 5GHz)
 3. Check signal strength
 4. Try different WiFi credentials
+5. Ensure config file was uploaded to SPIFFS
 ```
 
 #### Display Issues
@@ -757,10 +811,10 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 <div align="center">
 
-**🌌 Nebula Monitor v2.2** - *Monitoring the digital cosmos with Telegram alerts and hybrid intelligence*
+**🌌 Nebula Monitor v2.3** - *Monitoring the digital cosmos with external configuration, Telegram alerts, and hybrid intelligence*
 
 Made with ❤️ for the ESP32 community
 
-**🚀 Now with Telegram Alerts, Hybrid Monitoring, and Intelligent Touch Interface!**
+**🚀 Now with External Configuration, Telegram Alerts, Hybrid Monitoring, and Intelligent Touch Interface!**
 
 </div>

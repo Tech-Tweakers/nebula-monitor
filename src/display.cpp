@@ -84,25 +84,7 @@ void DisplayManager::end() {
   }
 }
 
-void DisplayManager::clearBuffer() {
-  // LVGL handles buffer management
-}
-
-void DisplayManager::setPixel(int x, int y, uint16_t color) {
-  // Use LVGL for pixel operations
-}
-
-void DisplayManager::drawRect(int x, int y, int w, int h, uint16_t color) {
-  // Use LVGL for drawing
-}
-
-void DisplayManager::fillRect(int x, int y, int w, int h, uint16_t color) {
-  // Use LVGL for drawing
-}
-
-void DisplayManager::drawText(int x, int y, const char* text, uint16_t color, uint16_t bg_color) {
-  // Use LVGL for text
-}
+// Funções removidas: clearBuffer(), setPixel(), drawRect(), fillRect(), drawText() - não utilizadas
 
 void DisplayManager::render() {
   // LVGL handles rendering

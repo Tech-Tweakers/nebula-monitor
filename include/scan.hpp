@@ -12,7 +12,7 @@ private:
   
 public:
   static bool begin(const Target* targetArray, int count);
-  static void end();
+  // static void end(); - removida (não utilizada)
   static void startScanning();
   static void stopScanning();
   static void update(); // Chamar no loop principal
@@ -35,6 +35,4 @@ public:
 
 // Funções de conveniência
 bool initScanner(Target* targets, int count);
-void startBackgroundScanning();
-void stopBackgroundScanning();
-void updateScanner();
+// Funções removidas: startBackgroundScanning(), stopBackgroundScanning(), updateScanner() - não utilizadas

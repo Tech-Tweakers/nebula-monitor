@@ -43,12 +43,7 @@ bool ScanManager::begin(const Target* targetArray, int count) {
   return true;
 }
 
-void ScanManager::end() {
-  stopScanning();
-  targets = nullptr;
-  targetCount = 0;
-  Serial.println("[SCAN] Scan Manager finalizado");
-}
+// Função removida: end() - não utilizada
 
 void ScanManager::startScanning() {
   if (isScanning) return;
@@ -81,7 +76,7 @@ void ScanManager::update() {
     
     // Fazer scan real para todos os targets
     for (int i = 0; i < targetCount; i++) {
-      DEBUG_LOGF("[SCAN] Verificando %s (tipo: %s)...\n", 
+      Serial.printf("[SCAN] Verificando %s (tipo: %s)...\n", 
                    targets[i].name, 
                    targets[i].monitor_type == HEALTH_CHECK ? "HEALTH_CHECK" : "PING");
       
@@ -96,11 +91,11 @@ void ScanManager::update() {
       // Escolher tipo de verificação baseado na configuração
       if (targets[i].monitor_type == HEALTH_CHECK) {
         // Health check via API endpoint
-        DEBUG_LOGF("[SCAN] Fazendo health check para %s...\n", targets[i].name);
+        Serial.printf("[SCAN] Fazendo health check para %s...\n", targets[i].name);
         latency = healthCheckTarget(targets[i].url, targets[i].health_endpoint);
       } else {
         // Ping simples
-        DEBUG_LOGF("[SCAN] Fazendo ping para %s...\n", targets[i].name);
+        Serial.printf("[SCAN] Fazendo ping para %s...\n", targets[i].name);
         latency = pingTarget(targets[i].url);
       }
       
@@ -120,7 +115,7 @@ void ScanManager::update() {
                      targets[i].monitor_type == HEALTH_CHECK ? "Health FAIL" : "Ping FAIL");
       }
       
-      delay(100); // Pausa menor para não travar
+      delay(200); // Pausa menor entre targets
       
       // Verificar se não travou
       if (millis() - now > 30000) { // 30 segundos máximo
@@ -140,13 +135,7 @@ bool initScanner(Target* targets, int count) {
   return ScanManager::begin(targets, count);
 }
 
-void startBackgroundScanning() {
-  ScanManager::startScanning();
-}
-
-void stopBackgroundScanning() {
-  ScanManager::stopScanning();
-}
+// Funções removidas: startBackgroundScanning(), stopBackgroundScanning() - não utilizadas
 
 // Implementação das funções de leitura
 Status ScanManager::getTargetStatus(int index) {
@@ -248,11 +237,19 @@ String ScanManager::getHealthCheckPayload(const char* url, uint16_t timeout) {
   if (strncmp(url, "https://", 8) == 0) {
     WiFiClientSecure client;
     client.setInsecure();
+    if (strstr(url, "ngrok-free.app")) {
+      // Configurações específicas para ngrok
+      client.setCACert(nullptr);  // Não usar CA cert
+      client.setInsecure();       // Ignorar validação SSL
+    }
     client.setTimeout((timeout + 999) / 1000);
     
     if (http.begin(client, url)) {
       http.addHeader("User-Agent", "NebulaWatch/1.0");
       http.addHeader("Accept", "application/json");
+      if (strstr(url, "ngrok-free.app")) {
+        http.addHeader("ngrok-skip-browser-warning", "true");
+      }
       
       int code = http.GET();
       if (code > 0) {
@@ -269,6 +266,9 @@ String ScanManager::getHealthCheckPayload(const char* url, uint16_t timeout) {
     if (http.begin(client, url)) {
       http.addHeader("User-Agent", "NebulaWatch/1.0");
       http.addHeader("Accept", "application/json");
+      if (strstr(url, "ngrok-free.app")) {
+        http.addHeader("ngrok-skip-browser-warning", "true");
+      }
       
       int code = http.GET();
       if (code > 0) {
@@ -285,6 +285,4 @@ String ScanManager::getHealthCheckPayload(const char* url, uint16_t timeout) {
   return "";
 }
 
-void updateScanner() {
-  ScanManager::update();
-}
+// Função removida: updateScanner() - não utilizada
