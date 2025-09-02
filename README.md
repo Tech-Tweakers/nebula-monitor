@@ -1,4 +1,4 @@
-# 🌌 Nebula Monitor v3.0
+# 🌌 Nebula Monitor v2.0
 
 > **ESP32 TFT Network Monitor Dashboard** - A comprehensive network monitoring solution with touch interface
 
@@ -36,7 +36,7 @@
 - **Organization**: [Tech-Tweakers](https://github.com/Tech-Tweakers)
 - **License**: MIT License
 - **Status**: Active Development
-- **Current Version**: v3.0
+- **Current Version**: v2.0
 - **Releases**: [View Releases](https://github.com/Tech-Tweakers/nebula-monitor/releases)
 
 ### 🎪 Key Highlights
@@ -171,7 +171,7 @@ git remote add origin https://github.com/Tech-Tweakers/nebula-monitor.git
 git add .
 
 # Commit changes
-git commit -m "Initial commit: Nebula Monitor v3.0"
+git commit -m "Initial commit: Nebula Monitor v2.0"
 
 # Push to repository
 git push -u origin main
@@ -602,7 +602,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 <div align="center">
 
-**🌌 Nebula Monitor v3.0** - *Monitoring the digital cosmos, one packet at a time*
+**🌌 Nebula Monitor v2.0** - *Monitoring the digital cosmos, one packet at a time*
 
 Made with ❤️ for the ESP32 community
 
