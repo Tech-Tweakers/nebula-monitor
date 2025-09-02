@@ -24,6 +24,11 @@ static constexpr int RAW_Y_MAX = 3800;
 #define WIFI_SSID "Polaris"
 #define WIFI_PASS "55548502"
 
+// Telegram Bot Configuration
+#define TELEGRAM_BOT_TOKEN "8160557136:AAFvJf0wYywnzyoVWPG8AU1GZrWH9Kdg6yY"
+#define TELEGRAM_CHAT_ID "6743862062"
+#define TELEGRAM_ENABLED true
+
 // RGB color conversion macro
 #define RGB(r,g,b) (((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3))
 
@@ -57,3 +62,43 @@ struct TileInfo {
   Status      st;
   uint16_t    lat_ms;
 };
+
+// Estrutura para controle de alertas
+struct AlertState {
+  uint8_t failure_count;      // Contador de falhas consecutivas
+  uint8_t last_status;        // Último status conhecido
+  unsigned long last_alert;   // Timestamp do último alerta
+  bool alert_sent;            // Se já foi enviado alerta
+  unsigned long downtime_start;  // Timestamp quando ficou DOWN
+};
+
+// Configurações de alertas
+#define MAX_FAILURES_BEFORE_ALERT 3
+#define ALERT_COOLDOWN_MS 300000  // 5 minutos entre alertas
+#define ALERT_RECOVERY_COOLDOWN_MS 60000  // 1 minuto para alerta de recuperação
+
+// Configurações de debug
+#define DEBUG_LOGS_ENABLED false  // true = logs ativos, false = logs desabilitados
+#define TOUCH_LOGS_ENABLED false  // true = logs de touch ativos, false = logs de touch desabilitados
+
+// Macro para logs condicionais
+#if DEBUG_LOGS_ENABLED
+  #define DEBUG_LOG(x) Serial.print(x)
+  #define DEBUG_LOGF(x, ...) Serial.printf(x, __VA_ARGS__)
+  #define DEBUG_LOGLN(x) Serial.println(x)
+#else
+  #define DEBUG_LOG(x)
+  #define DEBUG_LOGF(x, ...)
+  #define DEBUG_LOGLN(x)
+#endif
+
+// Macro para logs de touch condicionais
+#if TOUCH_LOGS_ENABLED
+  #define TOUCH_LOG(x) Serial.print(x)
+  #define TOUCH_LOGF(x, ...) Serial.printf(x, __VA_ARGS__)
+  #define TOUCH_LOGLN(x) Serial.println(x)
+#else
+  #define TOUCH_LOG(x)
+  #define TOUCH_LOGF(x, ...)
+  #define TOUCH_LOGLN(x)
+#endif

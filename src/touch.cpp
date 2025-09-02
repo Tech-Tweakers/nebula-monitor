@@ -76,7 +76,7 @@ void Touch::readRaw(int16_t& x, int16_t& y, int16_t& z) {
   z = (p1.z + p2.z + p3.z) / 3;
   
   // Debug pressure for sensitivity tuning
-  Serial.printf("[TOUCH] Pressure: %d (threshold: 10)\n", z);
+  TOUCH_LOGF("[TOUCH] Pressure: %d (threshold: 10)\n", z);
 }
 
 void Touch::mapRawToScreen(int16_t rx, int16_t ry, int& sx, int& sy) {
@@ -85,7 +85,7 @@ void Touch::mapRawToScreen(int16_t rx, int16_t ry, int& sx, int& sy) {
   // For rotation 2 (landscape), we need to swap and invert coordinates
   
   // Debug: print raw values
-  Serial.printf("[TOUCH] Raw: x=%d, y=%d\n", rx, ry);
+  TOUCH_LOGF("[TOUCH] Raw: x=%d, y=%d\n", rx, ry);
   
   // For rotation 2 (landscape), swap X and Y and invert Y
   // Also invert X to fix mirroring
@@ -100,5 +100,5 @@ void Touch::mapRawToScreen(int16_t rx, int16_t ry, int& sx, int& sy) {
   sy = (int)ny;
   
   // Debug: print mapped values
-  Serial.printf("[TOUCH] Mapped: x=%d, y=%d\n", sx, sy);
+  TOUCH_LOGF("[TOUCH] Mapped: x=%d, y=%d\n", sx, sy);
 }

@@ -5,6 +5,7 @@
 #include "touch.hpp"
 #include "net.hpp"
 #include "scan.hpp"
+#include "telegram.hpp"
 #include <lvgl.h>
 
 // Network targets
@@ -13,8 +14,8 @@ const Target targets[] = {
   {"Router #1", "http://192.168.1.1", nullptr, PING, UNKNOWN, 0},
   {"Router #2", "https://192.168.1.172", nullptr, PING, UNKNOWN, 0},
   {"Polaris API", "https://pet-chem-independence-australia.trycloudflare.com", "/health", HEALTH_CHECK, UNKNOWN, 0},
-  {"Polaris INT", "https://ebfc52323306.ngrok-free.app", "/health", HEALTH_CHECK, UNKNOWN, 0},
-  {"Polaris WEB", "https://tech-tweakers.github.io/polaris-v2-web/", "/health", HEALTH_CHECK, UNKNOWN, 0}
+  {"Polaris INT", "http://ebfc52323306.ngrok-free.app", "/health", HEALTH_CHECK, UNKNOWN, 0},
+  {"Polaris WEB", "https://tech-tweakers.github.io/polaris-v2-web/#/", "health", HEALTH_CHECK, UNKNOWN, 0}
 };
 
 const int N_TARGETS = sizeof(targets) / sizeof(targets[0]);
@@ -29,7 +30,7 @@ static lv_obj_t* latency_labels[6]; // Latency labels for scanner updates
 
 // Scanner integration variables
 static unsigned long last_scan_time = 0;
-static const unsigned long SCAN_INTERVAL = 5000; // 5 seconds between scans
+static const unsigned long SCAN_INTERVAL = 30000; // 60 seconds between scans
 static bool scanner_initialized = false;
 
 // Footer update variables
@@ -38,73 +39,117 @@ static const unsigned long UPTIME_UPDATE_INTERVAL = 500; // 1 second between upd
 static unsigned long start_time = 0;
 static lv_obj_t* uptime_label_ref = nullptr; // Global reference for uptime label
 static lv_obj_t* footer_ref = nullptr; // Global reference for footer
+static lv_obj_t* wifi_indicator_ref = nullptr; // Global reference for WiFi indicator
 static bool footer_show_network = true; // Toggle state for footer
+static int footer_mode = 0; // Footer mode: 0=System, 1=Network, 2=Performance, 3=Targets, 4=Uptime
+static lv_obj_t* footer_line2_ref = nullptr; // Global reference for footer line 2
+
+// Telegram chat ID discovery variables
+
+static bool telegram_initialized = false;
 
 // Footer long press variables
 static bool footer_pressed = false;
 static unsigned long footer_press_start = 0;
+
+// Function to update scan status indicator
+void updateScanStatusIndicator() {
+  if (wifi_indicator_ref) {
+    bool isScanning = ScanManager::isActive();
+    if (isScanning) {
+      // Red when scanning (touch blocked)
+      lv_obj_set_style_bg_color(wifi_indicator_ref, lv_color_hex(0x0000FF), LV_PART_MAIN); // Red (inverted)
+    } else {
+      // Green when free (touch responsive)
+      lv_obj_set_style_bg_color(wifi_indicator_ref, lv_color_hex(0xFF00FF), LV_PART_MAIN); // Green (inverted)
+    }
+  }
+}
+
+// Function to update footer with all modes (single line, abbreviated)
+void updateFooterContent() {
+  if (!uptime_label_ref) return;
+  
+  char line[60];
+  
+  switch (footer_mode) {
+    case 0: // System Status
+      {
+        int active_alerts = 0, targets_up = 0;
+        for (int i = 0; i < N_TARGETS; i++) {
+          if (ScanManager::getTargetStatus(i) == DOWN) active_alerts++;
+          if (ScanManager::getTargetStatus(i) == UP) targets_up++;
+        }
+        snprintf(line, sizeof(line), "Sys: %s | Alt: %d | %d/%d UP", 
+                 telegram_initialized ? "OK" : "OFF", active_alerts, targets_up, N_TARGETS);
+      }
+      break;
+      
+    case 1: // Network Info
+      snprintf(line, sizeof(line), "IP: %s | %d dBm | %ds", 
+               WiFi.localIP().toString().c_str(), WiFi.RSSI(), SCAN_INTERVAL / 1000);
+      break;
+      
+    case 2: // Performance
+      {
+        unsigned long uptime_seconds = (millis() - start_time) / 1000;
+        unsigned long hours = uptime_seconds / 3600;
+        unsigned long minutes = (uptime_seconds % 3600) / 60;
+        snprintf(line, sizeof(line), "CPU: %d%% | RAM: %d%% | UP: %02lu:%02lu", 
+                 (int)((millis() % 1000) / 10), (int)(ESP.getFreeHeap() * 100 / ESP.getHeapSize()), hours, minutes);
+      }
+      break;
+      
+    case 3: // Target Details
+      {
+        int targets_up = 0, targets_down = 0;
+        for (int i = 0; i < N_TARGETS; i++) {
+          if (ScanManager::getTargetStatus(i) == UP) targets_up++;
+          else if (ScanManager::getTargetStatus(i) == DOWN) targets_down++;
+        }
+        snprintf(line, sizeof(line), "UP: %d | DN: %d | UNK: %d | %s", 
+                 targets_up, targets_down, N_TARGETS - targets_up - targets_down,
+                 ScanManager::isActive() ? "SCAN" : "IDLE");
+      }
+      break;
+      
+    case 4: // Uptime & Status
+      {
+        unsigned long uptime_seconds = (millis() - start_time) / 1000;
+        unsigned long hours = uptime_seconds / 3600;
+        unsigned long minutes = (uptime_seconds % 3600) / 60;
+        snprintf(line, sizeof(line), "UP: %02lu:%02lu | RAM: %dKB | Next: %ds", 
+                 hours, minutes, ESP.getFreeHeap() / 1024,
+                 (SCAN_INTERVAL - (millis() - last_scan_time)) / 1000);
+      }
+      break;
+  }
+  
+  lv_label_set_text(uptime_label_ref, line);
+}
 static const unsigned long FOOTER_LONG_PRESS_TIME = 500; // 2 seconds for long press
 
 // Footer click callback
 void footer_click_cb(lv_event_t* e) {
-  Serial.println("[FOOTER] Callback chamado! Trocando estado...");
+  TOUCH_LOGLN("[FOOTER] Callback chamado! Trocando modo...");
   
-  footer_show_network = !footer_show_network; // Toggle state
+  // Cycle through all footer modes
+  footer_mode = (footer_mode + 1) % 5;
   
-  Serial.printf("[FOOTER] Novo estado: %s\n", footer_show_network ? "Rede" : "Status");
+  const char* mode_names[] = {"System", "Network", "Performance", "Targets", "Uptime"};
+  TOUCH_LOGF("[FOOTER] Novo modo: %s\n", mode_names[footer_mode]);
   
-  if (footer_show_network) {
-    // Show network info
-    char network_info[50];
-    snprintf(network_info, sizeof(network_info), "WiFi: OK | IP: %s", WiFi.localIP().toString().c_str());
-    Serial.printf("[FOOTER] Mostrando rede: %s\n", network_info);
-    if (uptime_label_ref) {
-      lv_label_set_text(uptime_label_ref, network_info);
-      Serial.println("[FOOTER] Texto atualizado para rede!");
-    } else {
-      Serial.println("[FOOTER] ERRO: uptime_label_ref é NULL!");
-    }
-  } else {
-    // Show uptime and status
-    unsigned long uptime_seconds = (millis() - start_time) / 1000;
-    unsigned long hours = uptime_seconds / 3600;
-    unsigned long minutes = (uptime_seconds % 3600) / 60;
-    
-    // Count targets status
-    int targets_ok = 0;
-    int targets_fail = 0;
-    for (int i = 0; i < N_TARGETS; i++) {
-      if (ScanManager::getTargetStatus(i) == UP) {
-        targets_ok++;
-      } else {
-        targets_fail++;
-      }
-    }
-    
-    char status_info[50];
-    if (hours > 0) {
-      snprintf(status_info, sizeof(status_info), "UP: %02lu:%02lu | OK:%d FAIL:%d", hours, minutes, targets_ok, targets_fail);
-    } else {
-      snprintf(status_info, sizeof(status_info), "UP: %02lu:%02lu | OK:%d FAIL:%d", minutes, uptime_seconds % 60, targets_ok, targets_fail);
-    }
-    
-    Serial.printf("[FOOTER] Mostrando status: %s\n", status_info);
-    if (uptime_label_ref) {
-      lv_label_set_text(uptime_label_ref, status_info);
-      Serial.println("[FOOTER] Texto atualizado para status!");
-    } else {
-      Serial.println("[FOOTER] ERRO: uptime_label_ref é NULL!");
-    }
-  }
+  // Update footer content
+  updateFooterContent();
   
   // Force display refresh
   lv_refr_now(lv_disp_get_default());
-  Serial.println("[FOOTER] Display forçado a atualizar!");
+  TOUCH_LOGLN("[FOOTER] Display forçado a atualizar!");
 }
 
 void setup() {
   Serial.begin(115200);
-  Serial.println("[MAIN] Iniciando Nebula Monitor v3.0...");
+  Serial.println("[MAIN] Iniciando Nebula Monitor v2.2...");
   
   // Connect to WiFi
   Serial.println("[MAIN] Conectando ao WiFi...");
@@ -141,6 +186,21 @@ void setup() {
   scanner_initialized = true;
   Serial.println("[MAIN] Scanner inicializado com sucesso!");
 
+  // Initialize Telegram alerts
+  if (initTelegramAlerts()) {
+    Serial.println("[MAIN] Sistema de alertas Telegram inicializado!");
+    telegram_initialized = true;
+    // Enviar mensagem de inicialização
+    delay(2000); // Aguardar um pouco
+    sendTestTelegramAlert();
+  } else {
+    Serial.println("[MAIN] Sistema de alertas Telegram não inicializado (configuração necessária)");
+    telegram_initialized = false;
+  }
+  
+  // Verificar status do Telegram
+  Serial.printf("[MAIN] Status do Telegram: %s\n", telegram_initialized ? "INICIALIZADO" : "NÃO INICIALIZADO");
+
   // Initialize LVGL screen
   main_screen = lv_scr_act();
   lv_obj_set_style_bg_color(main_screen, lv_color_hex(0x000000), LV_PART_MAIN); // Preto → aparecerá branco
@@ -155,7 +215,7 @@ void setup() {
 
   // Create title label
   title_label = lv_label_create(title_bar);
-  lv_label_set_text(title_label, "Nebula Monitor v2.1");
+  lv_label_set_text(title_label, "Nebula Monitor v2.2");
   lv_obj_set_style_text_color(title_label, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
   lv_obj_set_style_text_font(title_label, LV_FONT_DEFAULT, LV_PART_MAIN);
   lv_obj_center(title_label);
@@ -211,12 +271,12 @@ void setup() {
 
   // Create footer with flex layout - closer to the list
   lv_obj_t* footer = lv_obj_create(main_screen);
-  lv_obj_set_size(footer, 220, 32); // Reduced height for smaller appearance
-  lv_obj_set_pos(footer, 10, 260); // Reduced margin
+  lv_obj_set_size(footer, 220, 32); // Single line height
+  lv_obj_set_pos(footer, 10, 260); // Back to original position
   lv_obj_set_style_bg_color(footer, lv_color_hex(0x333333), LV_PART_MAIN);
   lv_obj_set_style_border_width(footer, 0, LV_PART_MAIN);
   lv_obj_set_style_radius(footer, 6, LV_PART_MAIN);
-  lv_obj_set_style_pad_all(footer, 6, LV_PART_MAIN); // Reduced padding for smaller appearance
+  lv_obj_set_style_pad_all(footer, 6, LV_PART_MAIN);
   
   // Make footer clickable
   lv_obj_add_event_cb(footer, footer_click_cb, LV_EVENT_CLICKED, nullptr);
@@ -225,20 +285,20 @@ void setup() {
   lv_obj_set_flex_flow(footer, LV_FLEX_FLOW_ROW);
   lv_obj_set_flex_align(footer, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
-  // WiFi status indicator
-  lv_obj_t* wifi_indicator = lv_obj_create(footer);
-  lv_obj_set_size(wifi_indicator, 10, 10); // Smaller indicator
-  lv_obj_set_style_bg_color(wifi_indicator, lv_color_hex(0xFF00FF), LV_PART_MAIN); // Green when connected - cor inversa para display invertido
-  lv_obj_set_style_radius(wifi_indicator, 5, LV_PART_MAIN);
-  lv_obj_set_style_border_width(wifi_indicator, 0, LV_PART_MAIN);
-  lv_obj_set_style_pad_right(wifi_indicator, 6, LV_PART_MAIN); // Space between indicator and text
+  // WiFi status indicator (now scan status indicator)
+  wifi_indicator_ref = lv_obj_create(footer);
+  lv_obj_set_size(wifi_indicator_ref, 10, 10); // Smaller indicator
+  lv_obj_set_style_bg_color(wifi_indicator_ref, lv_color_hex(0xFF00FF), LV_PART_MAIN); // Green when free - cor inversa para display invertido
+  lv_obj_set_style_radius(wifi_indicator_ref, 5, LV_PART_MAIN);
+  lv_obj_set_style_border_width(wifi_indicator_ref, 0, LV_PART_MAIN);
+  lv_obj_set_style_pad_right(wifi_indicator_ref, 6, LV_PART_MAIN); // Space between indicator and text
 
-  // Main footer text (will toggle between network info and uptime/status)
+  // Main footer text (single line with abbreviated info)
   lv_obj_t* footer_main_text = lv_label_create(footer);
-  lv_label_set_text(footer_main_text, "WiFi: OK | IP: 192.168.1.162");
+  lv_label_set_text(footer_main_text, "Sys: OK | Alt: 0 | 6/6 UP");
   lv_obj_set_style_text_color(footer_main_text, lv_color_hex(0xCCCCCC), LV_PART_MAIN);
-  lv_obj_set_style_text_font(footer_main_text, LV_FONT_DEFAULT, LV_PART_MAIN); // Default font
-  lv_obj_set_style_text_align(footer_main_text, LV_TEXT_ALIGN_LEFT, LV_PART_MAIN); // Left aligned text
+  lv_obj_set_style_text_font(footer_main_text, LV_FONT_DEFAULT, LV_PART_MAIN);
+  lv_obj_set_style_text_align(footer_main_text, LV_TEXT_ALIGN_LEFT, LV_PART_MAIN);
   
   // Store references for dynamic updates
   uptime_label_ref = footer_main_text;
@@ -250,6 +310,9 @@ void setup() {
 void loop() {
   // Handle LVGL tasks
   lv_timer_handler();
+  
+  // Small delay to give touch more processing time
+  delay(10);
 
   // Check WiFi connection and reconnect if needed
   if (WiFi.status() != WL_CONNECTED) {
@@ -267,9 +330,12 @@ void loop() {
     // Update scanner state machine
     ScanManager::update();
     
+    // Update scan status indicator
+    updateScanStatusIndicator();
+    
     // Check if we need to update display
     if (millis() - last_scan_time >= SCAN_INTERVAL) {
-      Serial.println("[SCANNER] Atualizando display...");
+      DEBUG_LOGLN("[SCANNER] Atualizando display...");
       
       // Update all targets from scanner data
       for (int i = 0; i < N_TARGETS; i++) {
@@ -278,7 +344,11 @@ void loop() {
         uint16_t latency = ScanManager::getTargetLatency(i);
         
         // Debug: mostrar status e latência
-        Serial.printf("[FRONTEND] Target %d: Status=%d, Latency=%d\n", i, status, latency);
+        DEBUG_LOGF("[FRONTEND] Target %d: Status=%d, Latency=%d\n", i, status, latency);
+        
+        // Atualizar sistema de alertas
+        DEBUG_LOGF("[MAIN] Chamando updateTelegramAlert para target %d (status=%d, latency=%d)\n", i, status, latency);
+        updateTelegramAlert(i, status, latency);
         
         if (status == UP && latency > 0) {
           char latency_text[30];
@@ -327,43 +397,20 @@ void loop() {
     
     // Update footer based on current mode
     if (millis() - last_uptime_update >= UPTIME_UPDATE_INTERVAL) {
-      if (footer_show_network) {
-        // Update network info
-        char network_info[50];
-        snprintf(network_info, sizeof(network_info), "WiFi: OK | IP: %s", WiFi.localIP().toString().c_str());
-        if (uptime_label_ref) {
-          lv_label_set_text(uptime_label_ref, network_info);
-        }
-      } else {
-        // Update uptime and status info
-        unsigned long uptime_seconds = (millis() - start_time) / 1000;
-        unsigned long hours = uptime_seconds / 3600;
-        unsigned long minutes = (uptime_seconds % 3600) / 60;
-        
-        // Count targets status
-        int targets_ok = 0;
-        int targets_fail = 0;
-        for (int i = 0; i < N_TARGETS; i++) {
-          if (ScanManager::getTargetStatus(i) == UP) {
-            targets_ok++;
-          } else {
-            targets_fail++;
-          }
-        }
-        
-        char status_info[50];
-        if (hours > 0) {
-          snprintf(status_info, sizeof(status_info), "UP: %02lu:%02lu | OK:%d FAIL:%d", hours, minutes, targets_ok, targets_fail);
-        } else {
-          snprintf(status_info, sizeof(status_info), "UP: %02lu:%02lu | OK:%d FAIL:%d", minutes, uptime_seconds % 60, targets_ok, targets_fail);
-        }
-        
-        if (uptime_label_ref) {
-          lv_label_set_text(uptime_label_ref, status_info);
-        }
-      }
+      updateFooterContent();
+
+
       last_uptime_update = millis();
     }
+  }
+
+
+  
+  // Verificar status do Telegram periodicamente (debug)
+  static unsigned long last_telegram_check = 0;
+  if (millis() - last_telegram_check >= 240000) { // A cada 10 segundos
+    Serial.printf("[MAIN] Status Telegram: %s\n", telegram_initialized ? "ATIVO" : "INATIVO");
+    last_telegram_check = millis();
   }
 
   // Handle touch input
@@ -374,14 +421,14 @@ void loop() {
     int screen_x, screen_y;
     Touch::mapRawToScreen(raw_x, raw_y, screen_x, screen_y);
     
-    Serial.printf("[TOUCH] Touch detectado em (%d, %d)\n", screen_x, screen_y);
+    TOUCH_LOGF("[TOUCH] Touch detectado em (%d, %d)\n", screen_x, screen_y);
     
     // Check if footer was touched
     if (footer_ref) {
       lv_area_t footer_area;
       lv_obj_get_coords(footer_ref, &footer_area);
       
-      Serial.printf("[TOUCH] Footer area: (%d,%d) to (%d,%d)\n", 
+      TOUCH_LOGF("[TOUCH] Footer area: (%d,%d) to (%d,%d)\n", 
                    footer_area.x1, footer_area.y1, footer_area.x2, footer_area.y2);
       
       if (screen_x >= footer_area.x1 && screen_x < footer_area.x2 && 
@@ -391,7 +438,7 @@ void loop() {
         if (!footer_pressed) {
           footer_pressed = true;
           footer_press_start = millis();
-          Serial.println("[TOUCH] FOOTER PRESSIONADO! Iniciando contagem de 2s...");
+          TOUCH_LOGLN("[TOUCH] FOOTER PRESSIONADO! Iniciando contagem de 2s...");
           
           // // Visual feedback - change footer color to indicate press
           // lv_obj_set_style_bg_color(footer_ref, lv_color_hex(0x555555), LV_PART_MAIN);
@@ -400,7 +447,7 @@ void loop() {
         
         // Check if long press time reached
         if (footer_pressed && (millis() - footer_press_start >= FOOTER_LONG_PRESS_TIME)) {
-          Serial.println("[TOUCH] PRESSÃO LONGA ATINGIDA! Executando toggle...");
+          TOUCH_LOGLN("[TOUCH] PRESSÃO LONGA ATINGIDA! Executando toggle...");
           
           // Execute toggle
           footer_click_cb(nullptr);
@@ -413,7 +460,7 @@ void loop() {
           // lv_obj_set_style_bg_color(footer_ref, lv_color_hex(0x333333), LV_PART_MAIN);
           // lv_refr_now(lv_disp_get_default());
           
-          Serial.println("[TOUCH] Toggle executado e footer restaurado!");
+          TOUCH_LOGLN("[TOUCH] Toggle executado e footer restaurado!");
           return; // Exit early since footer was toggled
         }
       } else {
@@ -421,7 +468,7 @@ void loop() {
         if (footer_pressed) {
           footer_pressed = false;
           footer_press_start = 0;
-          Serial.println("[TOUCH] Touch fora do footer - resetando pressão!");
+          TOUCH_LOGLN("[TOUCH] Touch fora do footer - resetando pressão!");
           
           // Restore original footer color
           lv_obj_set_style_bg_color(footer_ref, lv_color_hex(0x333333), LV_PART_MAIN);
@@ -443,7 +490,7 @@ void loop() {
         lv_obj_set_style_bg_color(status_labels[i], lv_color_hex(randomColor), LV_PART_MAIN);
         lv_obj_invalidate(status_labels[i]);
         
-        Serial.printf("[TOUCH] Status item %d (%s) tocado - Cor: #%06X\n", 
+        TOUCH_LOGF("[TOUCH] Status item %d (%s) tocado - Cor: #%06X\n", 
                      i, targets[i].name, randomColor);
         break;
       }

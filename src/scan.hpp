@@ -30,6 +30,7 @@ public:
   
   // Função para health check via API
   static uint16_t healthCheckTarget(const char* base_url, const char* health_endpoint);
+  static String getHealthCheckPayload(const char* url, uint16_t timeout);
 };
 
 // Funções de conveniência
