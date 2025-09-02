@@ -70,7 +70,7 @@ void ScanManager::setInterval(uint32_t interval_ms) {
 }
 
 void ScanManager::update() {
-  if (!isScanning || !targets) return;
+  if (!targets) return;
   
   uint32_t now = millis();
   

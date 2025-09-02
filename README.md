@@ -1,10 +1,11 @@
-# 🌌 Nebula Monitor v2.0
+# 🌌 Nebula Monitor v2.2
 
-> **ESP32 TFT Network Monitor Dashboard** - A comprehensive network monitoring solution with touch interface
+> **ESP32 TFT Network Monitor Dashboard** - A comprehensive network monitoring solution with Telegram alerts, hybrid monitoring, and intelligent touch interface
 
 [![PlatformIO](https://img.shields.io/badge/PlatformIO-ESP32-blue.svg)](https://platformio.org/)
 [![LVGL](https://img.shields.io/badge/LVGL-8.3.11-green.svg)](https://lvgl.io/)
 [![TFT_eSPI](https://img.shields.io/badge/TFT_eSPI-Latest-orange.svg)](https://github.com/Bodmer/TFT_eSPI)
+[![Telegram](https://img.shields.io/badge/Telegram-Alerts-blue.svg)](https://telegram.org/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![GitHub](https://img.shields.io/badge/GitHub-Tech--Tweakers-black.svg)](https://github.com/Tech-Tweakers)
 [![Repository](https://img.shields.io/badge/Repo-nebula--monitor-blue.svg)](https://github.com/Tech-Tweakers/nebula-monitor)
@@ -13,6 +14,7 @@
 
 - [🎯 Overview](#-overview)
 - [✨ Features](#-features)
+- [🚨 Telegram Alerts](#-telegram-alerts)
 - [🔧 Hardware Requirements](#-hardware-requirements)
 - [📦 Dependencies](#-dependencies)
 - [🚀 Quick Start](#-quick-start)
@@ -29,46 +31,122 @@
 
 ## 🎯 Overview
 
-**Nebula Monitor** is a sophisticated network monitoring dashboard designed for ESP32-based TFT displays. It provides real-time monitoring of network services, servers, and endpoints with an intuitive touch interface powered by LVGL.
+**Nebula Monitor v2.2** is a sophisticated network monitoring dashboard designed for ESP32-based TFT displays. It provides real-time monitoring of network services, servers, and endpoints with an intuitive touch interface powered by LVGL, complete with Telegram alert system and hybrid monitoring capabilities.
 
 ### 📍 Repository Information
 - **GitHub**: [Tech-Tweakers/nebula-monitor](https://github.com/Tech-Tweakers/nebula-monitor)
 - **Organization**: [Tech-Tweakers](https://github.com/Tech-Tweakers)
 - **License**: MIT License
 - **Status**: Active Development
-- **Current Version**: v2.0
+- **Current Version**: v2.2
 - **Releases**: [View Releases](https://github.com/Tech-Tweakers/nebula-monitor/releases)
 
 ### 🎪 Key Highlights
 
-- **Real-time Network Monitoring**: Continuous health checks of multiple network targets
-- **Touch Interface**: Interactive LVGL-based UI with responsive touch controls
-- **WiFi Management**: Automatic connection and reconnection handling
-- **Visual Status Indicators**: Color-coded status display with latency information
-- **Uptime Tracking**: System uptime and service statistics
-- **Professional UI**: Clean, modern interface with proper color mapping
+- **🚨 Telegram Alert System**: Real-time notifications for service outages and recoveries
+- **🔄 Hybrid Monitoring**: PING for basic connectivity + Health Check for API endpoints
+- **📊 Intelligent Footer**: 5 modes of system information with compact display
+- **🎯 Visual Scan Indicator**: Bolinha verde/vermelha shows scan status and touch responsiveness
+- **⚡ Performance Optimized**: 30s scan intervals, conditional logging, touch optimized
+- **🎮 Touch Interface**: Interactive LVGL-based UI with responsive touch controls
+- **🌐 WiFi Management**: Automatic connection and reconnection handling
+- **📈 Uptime Tracking**: System uptime and service statistics
 
 ## ✨ Features
 
-### 🌐 Network Monitoring
+### 🚨 Telegram Alert System
+- **Real-time Notifications**: Instant alerts when services go down or recover
+- **Smart Thresholds**: Configurable failure count before alerting (default: 3 failures)
+- **Cooldown Management**: Prevents spam with 5-minute alert cooldowns
+- **Recovery Alerts**: Notifications when services come back online
+- **Downtime Tracking**: Total downtime duration in recovery messages
+- **Auto Chat ID Discovery**: Automatic Telegram chat ID detection
+- **Rich Message Format**: Formatted alerts with emojis and detailed information
+
+### 🔄 Hybrid Network Monitoring
+- **PING Monitoring**: Basic connectivity checks for routers and servers
+- **Health Check Monitoring**: API endpoint status verification with JSON payload parsing
 - **Multi-target Scanning**: Monitor up to 6 network endpoints simultaneously
 - **HTTP/HTTPS Support**: Full support for both HTTP and HTTPS protocols
 - **Latency Measurement**: Real-time response time tracking
 - **Status Classification**: UP/DOWN/UNKNOWN status with visual indicators
 - **Automatic Retry**: Intelligent retry logic for failed connections
 
-### 🎨 User Interface
+### 🎨 Intelligent User Interface
 - **LVGL Integration**: Modern, responsive UI framework
 - **Touch Controls**: Full touch support with visual feedback
 - **Color-coded Status**: Intuitive color system for quick status recognition
 - **Dynamic Updates**: Real-time UI updates without flickering
-- **Footer Toggle**: Switch between network info and system status
+- **Smart Footer**: 5 modes of system information (System, Network, Performance, Targets, Uptime)
+- **Visual Scan Indicator**: Green/red bolinha shows scan status and touch responsiveness
+- **Compact Display**: Abbreviated text for maximum information density
 
-### 🔧 System Features
+### 🔧 Advanced System Features
 - **WiFi Auto-reconnect**: Automatic WiFi reconnection on failure
 - **Memory Efficient**: Optimized memory usage for ESP32
 - **Non-blocking Operations**: Asynchronous network operations
-- **Debug Logging**: Comprehensive serial logging for troubleshooting
+- **Conditional Logging**: Debug logs can be enabled/disabled for performance
+- **Touch Optimization**: 10ms delay for improved touch responsiveness
+- **Scan Management**: Intelligent scan state management with proper start/stop
+
+## 🚨 Telegram Alerts
+
+### 📱 Alert Configuration
+
+#### Bot Setup
+1. Create a Telegram bot via [@BotFather](https://t.me/botfather)
+2. Get your bot token
+3. Configure in `include/config.hpp`:
+```cpp
+#define TELEGRAM_BOT_TOKEN "your_bot_token_here"
+#define TELEGRAM_CHAT_ID "your_chat_id_here"
+#define TELEGRAM_ENABLED true
+```
+
+#### Alert Settings
+```cpp
+#define MAX_FAILURES_BEFORE_ALERT 3        // Failures before alert
+#define ALERT_COOLDOWN_MS 300000           // 5 minutes between alerts
+#define ALERT_RECOVERY_COOLDOWN_MS 60000   // 1 minute for recovery alerts
+```
+
+### 🔔 Alert Types
+
+#### Service Down Alert
+```
+🔴 ALERTA - Proxmox HV
+
+❌ Proxmox HV está com problemas!
+📊 Status: DOWN
+⏱️ Última latência: 0 ms
+🕐 00:05:23 de downtime
+
+🌌 Nebula Monitor v2.2
+```
+
+#### Service Recovery Alert
+```
+🟢 ONLINE - Proxmox HV
+
+✅ Proxmox HV está funcionando novamente!
+⏱️ Latência: 45 ms
+🕐 01:23:45 de uptime
+⏰ Downtime total: 00:05:23
+
+🌌 Nebula Monitor v2.2
+```
+
+#### System Startup Alert
+```
+🚀 Nebula Monitor v2.2 iniciado com sucesso!
+
+✅ Sistema de alertas ativo
+📊 Monitorando 6 targets
+🔔 Threshold: 3 falhas
+⏰ Cooldown: 300s
+
+Tech Tweakers
+```
 
 ## 🔧 Hardware Requirements
 
@@ -136,18 +214,28 @@ Edit `include/config.hpp`:
 #define WIFI_PASS "YourWiFiPassword"
 ```
 
-### 4️⃣ Configure Network Targets
+### 4️⃣ Configure Telegram Alerts (Optional)
+Edit `include/config.hpp`:
+```cpp
+#define TELEGRAM_BOT_TOKEN "your_bot_token_here"
+#define TELEGRAM_CHAT_ID "your_chat_id_here"
+#define TELEGRAM_ENABLED true
+```
+
+### 5️⃣ Configure Network Targets
 Edit `src/main.cpp` to add your monitoring targets:
 ```cpp
 const Target targets[] = {
-  {"Server 1", "http://192.168.1.100", UNKNOWN, 0},
-  {"API Endpoint", "https://api.example.com", UNKNOWN, 0},
-  {"Web Service", "http://192.168.1.200:8080", UNKNOWN, 0},
-  // Add more targets as needed
+  {"Proxmox HV", "http://192.168.1.128:8006/", nullptr, PING, UNKNOWN, 0},
+  {"Router #1", "http://192.168.1.1", nullptr, PING, UNKNOWN, 0},
+  {"Router #2", "https://192.168.1.172", nullptr, PING, UNKNOWN, 0},
+  {"Polaris API", "https://api.example.com", "/health", HEALTH_CHECK, UNKNOWN, 0},
+  {"Polaris INT", "http://integration.example.com", "/health", HEALTH_CHECK, UNKNOWN, 0},
+  {"Polaris WEB", "https://web.example.com", "health", HEALTH_CHECK, UNKNOWN, 0}
 };
 ```
 
-### 5️⃣ Build and Upload
+### 6️⃣ Build and Upload
 ```bash
 # Build the project
 pio run
@@ -157,24 +245,6 @@ pio run --target upload
 
 # Monitor serial output
 pio device monitor
-```
-
-### 6️⃣ First Git Setup (Optional)
-```bash
-# Initialize git repository (if not already done)
-git init
-
-# Add remote origin
-git remote add origin https://github.com/Tech-Tweakers/nebula-monitor.git
-
-# Add all files
-git add .
-
-# Commit changes
-git commit -m "Initial commit: Nebula Monitor v2.0"
-
-# Push to repository
-git push -u origin main
 ```
 
 ## ⚙️ Configuration
@@ -192,12 +262,31 @@ git push -u origin main
 ```cpp
 // In src/main.cpp
 const Target targets[] = {
-  {"Display Name", "http://target-url", UNKNOWN, 0},
+  {"Display Name", "http://target-url", "/health", HEALTH_CHECK, UNKNOWN, 0},
   // name: Display name in UI
   // url: Full URL to monitor
+  // health_endpoint: Health check endpoint (nullptr for PING)
+  // monitor_type: PING or HEALTH_CHECK
   // st: Initial status (UNKNOWN)
   // lat_ms: Initial latency (0)
 };
+```
+
+### 🚨 Telegram Configuration
+
+#### Bot Token and Chat ID
+```cpp
+// In include/config.hpp
+#define TELEGRAM_BOT_TOKEN "8160557136:AAFvJf0wYywnzyoVWPG8AU1GZrWH9Kdg6yY"
+#define TELEGRAM_CHAT_ID "6743862062"
+#define TELEGRAM_ENABLED true
+```
+
+#### Alert Thresholds
+```cpp
+#define MAX_FAILURES_BEFORE_ALERT 3        // Failures before alert
+#define ALERT_COOLDOWN_MS 300000           // 5 minutes between alerts
+#define ALERT_RECOVERY_COOLDOWN_MS 60000   // 1 minute for recovery alerts
 ```
 
 ### 🎨 Display Settings
@@ -222,6 +311,21 @@ static constexpr int RAW_Y_MIN = 240;
 static constexpr int RAW_Y_MAX = 3800;
 ```
 
+### 🔧 Performance Settings
+
+#### Debug Logging
+```cpp
+// In include/config.hpp
+#define DEBUG_LOGS_ENABLED false      // General debug logs
+#define TOUCH_LOGS_ENABLED false      // Touch-specific logs
+```
+
+#### Scan Configuration
+```cpp
+// In src/main.cpp
+static const unsigned long SCAN_INTERVAL = 30000; // 30 seconds between scans
+```
+
 ## 🎨 Color System
 
 ### 🔄 Color Inversion
@@ -238,36 +342,36 @@ This project uses a **color-inverted display** (ST7789 with `TFT_INVERSION_ON=1`
 | 🔘 **DARK GRAY** | `0x2d2d2d` | Title Bar |
 | 🔘 **LIGHT GRAY** | `0x111111` | List Items |
 
-### 📖 Color Reference
-See [COLOR_MAPPING.md](COLOR_MAPPING.md) for detailed color mapping documentation.
-
 ## 📱 User Interface
 
 ### 🏠 Main Screen Layout
 
 ```
 ┌─────────────────────────────────┐
-│        Nebula Monitor v3.0      │ ← Title Bar
+│        Nebula Monitor v2.2      │ ← Title Bar
 ├─────────────────────────────────┤
 │ ┌─────────────────────────────┐ │
-│ │ Target 1        [123 ms]    │ │ ← Status Items
-│ │ Target 2        [DOWN]      │ │
-│ │ Target 3        [456 ms]    │ │
-│ │ Target 4        [789 ms]    │ │
-│ │ Target 5        [DOWN]      │ │
-│ │ Target 6        [234 ms]    │ │
+│ │ Proxmox HV      [123 ms]    │ │ ← Status Items
+│ │ Router #1       [45 ms]     │ │
+│ │ Router #2       [DOWN]      │ │
+│ │ Polaris API     [OK]        │ │
+│ │ Polaris INT     [OK]        │ │
+│ │ Polaris WEB     [OK]        │ │
 │ └─────────────────────────────┘ │
 ├─────────────────────────────────┤
-│ ● WiFi: OK | IP: 192.168.1.100 │ ← Footer (Clickable)
+│ 🟢 Sys: OK | Alt: 0 | 6/6 UP   │ ← Smart Footer (Clickable)
 └─────────────────────────────────┘
 ```
 
 ### 🎮 Touch Interactions
 
-#### Footer Toggle
-- **Short Press**: Toggle between network info and system status
-- **Network Mode**: Shows WiFi status and IP address
-- **Status Mode**: Shows uptime and target statistics
+#### Footer Toggle (5 Modes)
+- **Touch**: Cycles through 5 information modes
+- **Mode 0 - System**: `Sys: OK | Alt: 0 | 6/6 UP`
+- **Mode 1 - Network**: `IP: 192.168.1.162 | -45 dBm | 30s`
+- **Mode 2 - Performance**: `CPU: 45% | RAM: 32% | UP: 01:23`
+- **Mode 3 - Targets**: `UP: 4 | DN: 2 | UNK: 0 | SCAN`
+- **Mode 4 - Uptime**: `UP: 01:23 | RAM: 107KB | Next: 28s`
 
 #### Status Items
 - **Touch**: Visual feedback with random color flash
@@ -275,6 +379,10 @@ See [COLOR_MAPPING.md](COLOR_MAPPING.md) for detailed color mapping documentatio
   - 🟢 Green: Target UP with good latency (<500ms)
   - 🔵 Blue: Target UP with high latency (≥500ms)
   - 🔴 Red: Target DOWN
+
+#### Visual Scan Indicator
+- **🟢 Green Bolinha**: System free, touch responsive
+- **🔴 Red Bolinha**: Scan active, touch may be slow
 
 ### 📊 Status Indicators
 
@@ -287,42 +395,55 @@ See [COLOR_MAPPING.md](COLOR_MAPPING.md) for detailed color mapping documentatio
 - **Good**: <500ms (Green background)
 - **Slow**: ≥500ms (Blue background)
 - **Down**: "DOWN" text (Red background)
+- **Health Check**: "OK" text (Green background)
 
 ## 🔍 Network Monitoring
 
-### 🔄 Scanning Process
+### 🔄 Hybrid Scanning Process
 
 1. **Initialization**: Scanner starts with all targets in UNKNOWN state
 2. **Sequential Scanning**: Each target is checked in sequence
-3. **HTTP Request**: GET request with 5-second timeout
-4. **Response Analysis**: Status code and response time recorded
+3. **Monitoring Type Selection**:
+   - **PING**: Basic HTTP GET request with 5-second timeout
+   - **HEALTH_CHECK**: API endpoint check with JSON payload parsing
+4. **Response Analysis**: Status code, response time, and health status recorded
 5. **UI Update**: Display updated with new status and latency
-6. **Cycle Repeat**: Process repeats every 5 seconds
+6. **Alert Processing**: Telegram alerts sent based on failure thresholds
+7. **Cycle Repeat**: Process repeats every 30 seconds
 
 ### 🌐 Supported Protocols
 
-#### HTTP
+#### HTTP PING
 - Standard HTTP requests
 - Follows redirects
 - Custom User-Agent: "NebulaWatch/1.0"
+- 5-second timeout
 
-#### HTTPS
+#### HTTPS PING
 - Secure HTTPS requests
 - Insecure mode (no certificate validation)
 - Extended timeout for slow services (7+ seconds)
 
+#### Health Check API
+- JSON payload parsing
+- Looks for `"status":"healthy"` in response
+- Supports various API response formats
+- Automatic HTTP fallback for HTTPS failures
+
 ### ⚡ Performance Optimization
 
-#### Timeout Management
+#### Scan Management
 ```cpp
-// Standard targets: 5 second timeout
-// Cloudflare/Ngrok: 7+ second timeout (slower services)
+// 30-second scan intervals (vs 5 seconds in v2.0)
+// Proper isScanning state management
+// Touch optimization with 10ms delays
 ```
 
 #### Memory Management
 - Non-blocking HTTP requests
 - Efficient string handling
 - Minimal memory allocation
+- Conditional logging system
 
 ## 🛠️ Development
 
@@ -333,6 +454,7 @@ See [COLOR_MAPPING.md](COLOR_MAPPING.md) for detailed color mapping documentatio
 - ESP32 development board
 - USB cable for programming
 - Serial monitor access
+- Telegram bot (for alert testing)
 
 #### Build Commands
 ```bash
@@ -357,14 +479,23 @@ pio run --target upload
 #### Serial Output
 The project provides comprehensive debug logging:
 ```
-[MAIN] Iniciando Nebula Monitor v3.0...
+[MAIN] Iniciando Nebula Monitor v2.2...
 [MAIN] Conectando ao WiFi...
 [MAIN] WiFi conectado com sucesso!
 [MAIN] Display inicializado com sucesso!
 [MAIN] Touch inicializado com sucesso!
 [MAIN] Scanner inicializado com sucesso!
+[MAIN] Sistema de alertas Telegram inicializado!
 [SCANNER] Target 0: Status=1, Latency=123
+[TELEGRAM] Alerta enviado com sucesso!
 [TOUCH] Touch detectado em (120, 160)
+```
+
+#### Debug Logging Control
+```cpp
+// Enable/disable debug logs in include/config.hpp
+#define DEBUG_LOGS_ENABLED true      // General debug logs
+#define TOUCH_LOGS_ENABLED true      // Touch-specific logs
 ```
 
 #### Common Issues
@@ -372,43 +503,44 @@ The project provides comprehensive debug logging:
 2. **Display Not Working**: Verify pin connections and TFT driver settings
 3. **Touch Not Responding**: Check touch calibration values
 4. **Network Timeouts**: Verify target URLs and network connectivity
+5. **Telegram Alerts Not Working**: Check bot token and chat ID
+6. **Touch Slow/Unresponsive**: Enable touch optimization, check scan frequency
 
 ### 🔄 Code Structure
 
 #### Main Components
-- **main.cpp**: Application entry point and main loop
+- **main.cpp**: Application entry point, UI management, and main loop
 - **display.cpp**: TFT display management and LVGL integration
 - **touch.cpp**: Touch input handling and calibration
 - **net.cpp**: WiFi and HTTP client functionality
 - **scan.cpp**: Network monitoring and target management
+- **telegram.cpp**: **NEW** - Telegram alert system implementation
 
 #### Key Classes
 - **DisplayManager**: TFT display and LVGL management
 - **Touch**: Touch input handling
 - **Net**: WiFi and HTTP operations
 - **ScanManager**: Network monitoring logic
+- **TelegramAlerts**: **NEW** - Telegram notification system
 
 ## 📁 Project Structure
 
 ```
 nebula-monitor/
-├── 📁 data/                    # Asset files
-│   └── tt_logo.png            # Logo image
 ├── 📁 include/                 # Header files
 │   ├── config.hpp             # Configuration constants
 │   ├── display.hpp            # Display manager interface
 │   ├── lv_conf.h              # LVGL configuration
 │   ├── net.hpp                # Network operations interface
-│   ├── touch.hpp              # Touch input interface
-│   └── User_Setup.h           # TFT_eSPI user setup
-├── 📁 lib/                     # Library files
-│   └── README                 # Library documentation
+│   ├── scan.hpp               # Scanner interface
+│   ├── telegram.hpp           # **NEW** - Telegram alerts interface
+│   └── touch.hpp              # Touch input interface
 ├── 📁 src/                     # Source files
 │   ├── main.cpp               # Main application
 │   ├── display.cpp            # Display implementation
 │   ├── net.cpp                # Network implementation
 │   ├── scan.cpp               # Scanner implementation
-│   ├── scan.hpp               # Scanner interface
+│   ├── telegram.cpp           # **NEW** - Telegram alerts implementation
 │   └── touch.cpp              # Touch implementation
 ├── 📁 test/                    # Test files
 │   └── README                 # Test documentation
@@ -449,6 +581,8 @@ Solution:
 2. Verify TOUCH_CS pin (GPIO 33)
 3. Recalibrate touch coordinates
 4. Check touch controller wiring
+5. Enable touch optimization (10ms delay)
+6. Check scan frequency (30s intervals)
 ```
 
 #### Network Monitoring Issues
@@ -459,6 +593,20 @@ Solution:
 2. Check network connectivity
 3. Increase timeout values for slow services
 4. Verify HTTP vs HTTPS protocol usage
+5. Check health check endpoint configuration
+6. Verify JSON payload format for health checks
+```
+
+#### Telegram Alert Issues
+```
+Problem: Telegram alerts not working
+Solution:
+1. Verify bot token in config.hpp
+2. Check chat ID configuration
+3. Send a message to the bot first
+4. Verify TELEGRAM_ENABLED is true
+5. Check network connectivity
+6. Monitor serial output for Telegram errors
 ```
 
 ### 🔍 Debug Information
@@ -473,6 +621,7 @@ pio device monitor --baud 115200
 - `[MAIN]`: Application startup and initialization
 - `[NET]`: WiFi and network operations
 - `[SCANNER]`: Network monitoring status
+- `[TELEGRAM]`: **NEW** - Telegram alert operations
 - `[TOUCH]`: Touch input events
 - `[FOOTER]`: Footer interaction events
 
@@ -481,40 +630,43 @@ pio device monitor --baud 115200
 ### ⚡ System Performance
 
 #### Memory Usage
-- **Flash**: ~1.2MB (typical ESP32 project)
-- **RAM**: ~200KB (with LVGL buffers)
-- **Free Heap**: ~150KB (available for operations)
+- **Flash**: ~1.17MB (89.3% of 1.31MB)
+- **RAM**: ~108KB (32.9% of 327KB)
+- **Free Heap**: ~220KB (available for operations)
 
 #### Network Performance
-- **Scan Interval**: 5 seconds per cycle
+- **Scan Interval**: 30 seconds per cycle (optimized from 5s)
 - **HTTP Timeout**: 5 seconds (standard), 7+ seconds (cloud services)
 - **Concurrent Requests**: 1 (sequential scanning)
 - **Memory per Request**: ~2KB
+- **Alert Cooldown**: 5 minutes between alerts
 
 #### Display Performance
 - **Refresh Rate**: 60 FPS (LVGL default)
-- **Touch Response**: <50ms
+- **Touch Response**: <50ms (optimized with 10ms delay)
 - **UI Updates**: Non-blocking, smooth animations
+- **Footer Updates**: 500ms intervals
 
-### 🎯 Optimization Tips
+### 🎯 Optimization Features
 
-#### Memory Optimization
-1. Use `const` for static strings
-2. Minimize string concatenation
-3. Use stack allocation when possible
-4. Monitor heap usage with `ESP.getFreeHeap()`
+#### Performance Optimizations
+1. **Conditional Logging**: Debug logs can be disabled for production
+2. **Scan Frequency**: Reduced from 5s to 30s for better performance
+3. **Touch Optimization**: 10ms delay for improved responsiveness
+4. **Memory Management**: Efficient string handling and minimal allocation
+5. **State Management**: Proper scan state tracking
 
-#### Network Optimization
-1. Use appropriate timeouts for each service
-2. Implement connection pooling
-3. Cache DNS lookups
-4. Use HTTP/2 when available
+#### Network Optimizations
+1. **Hybrid Monitoring**: PING for basic, Health Check for APIs
+2. **Intelligent Timeouts**: Different timeouts for different service types
+3. **HTTP Fallback**: Automatic HTTP fallback for HTTPS failures
+4. **Connection Reuse**: Efficient HTTP client management
 
-#### Display Optimization
-1. Minimize LVGL object creation
-2. Use efficient color formats
-3. Implement dirty region updates
-4. Optimize touch event handling
+#### UI Optimizations
+1. **Compact Footer**: Abbreviated text for maximum information
+2. **Visual Indicators**: Bolinha verde/vermelha for scan status
+3. **Smart Updates**: Only update when necessary
+4. **Touch Feedback**: Visual feedback for all interactions
 
 ## 🤝 Contributing
 
@@ -532,6 +684,7 @@ pio device monitor --baud 115200
 - **Network Features**: Implement new monitoring protocols or features
 - **UI/UX Improvements**: Enhance the LVGL interface and user experience
 - **Performance**: Optimize memory usage and network operations
+- **Telegram Features**: Enhance alert system with new features
 - **Documentation**: Improve code comments and documentation
 - **Testing**: Add unit tests and integration tests
 
@@ -558,6 +711,7 @@ When reporting bugs, please include:
 3. **Error messages** (serial output)
 4. **Steps to reproduce**
 5. **Expected vs actual behavior**
+6. **Telegram configuration** (if applicable)
 
 ### 💡 Feature Requests
 
@@ -588,6 +742,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **TFT_eSPI Library** for robust display support
 - **ESP32 Community** for comprehensive documentation
 - **PlatformIO** for the excellent development platform
+- **Telegram** for the powerful bot API
 
 ---
 
@@ -602,8 +757,10 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 <div align="center">
 
-**🌌 Nebula Monitor v2.0** - *Monitoring the digital cosmos, one packet at a time*
+**🌌 Nebula Monitor v2.2** - *Monitoring the digital cosmos with Telegram alerts and hybrid intelligence*
 
 Made with ❤️ for the ESP32 community
+
+**🚀 Now with Telegram Alerts, Hybrid Monitoring, and Intelligent Touch Interface!**
 
 </div>

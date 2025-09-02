@@ -8,6 +8,7 @@ private:
   static String botToken;
   static String chatId;
   static AlertState alertStates[6]; // Array para controlar alertas de cada target
+  static bool sendingMessage; // Flag para indicar se está enviando mensagem
   
 public:
   // Inicialização
@@ -41,6 +42,7 @@ public:
     }
     return active;
   }
+  static bool isSendingMessage() { return sendingMessage; }
   static int getFailureCount(int targetIndex);
   static void resetFailureCount(int targetIndex);
 };

@@ -7,6 +7,7 @@ bool TelegramAlerts::isEnabled = false;
 String TelegramAlerts::botToken = "";
 String TelegramAlerts::chatId = "";
 AlertState TelegramAlerts::alertStates[6];
+bool TelegramAlerts::sendingMessage = false;
 
 bool TelegramAlerts::begin() {
   Serial.println("[TELEGRAM] Inicializando sistema de alertas...");
@@ -252,6 +253,8 @@ bool TelegramAlerts::sendMessage(const String& message) {
     return false;
   }
   
+  sendingMessage = true; // Set flag to indicate sending message
+  
   String url = "https://api.telegram.org/bot" + botToken + "/sendMessage";
   
   HTTPClient http;
@@ -271,18 +274,22 @@ bool TelegramAlerts::sendMessage(const String& message) {
   
   int httpResponseCode = http.POST(jsonString);
   
+  bool success = false;
   if (httpResponseCode > 0) {
     String response = http.getString();
     Serial.printf("[TELEGRAM] Resposta HTTP: %d\n", httpResponseCode);
     Serial.printf("[TELEGRAM] Resposta: %s\n", response.c_str());
     
     http.end();
-    return httpResponseCode == 200;
+    success = httpResponseCode == 200;
   } else {
     Serial.printf("[TELEGRAM] Erro HTTP: %d\n", httpResponseCode);
     http.end();
-    return false;
+    success = false;
   }
+  
+  sendingMessage = false; // Reset flag after sending
+  return success;
 }
 
 // Nova função para verificar se o payload JSON indica status healthy
