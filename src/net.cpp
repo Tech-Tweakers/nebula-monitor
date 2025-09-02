@@ -66,12 +66,21 @@ uint16_t Net::httpPing(const char* url, uint16_t timeout_ms){
   auto follow = HTTPC_STRICT_FOLLOW_REDIRECTS;
 
   if (strncmp(url,"https://",8)==0){
-    WiFiClientSecure client; client.setInsecure();
+    WiFiClientSecure client; 
+    client.setInsecure();
+    if (strstr(url,"ngrok-free.app")) {
+      // Configurações específicas para ngrok
+      client.setCACert(nullptr);  // Não usar CA cert
+      client.setInsecure();       // Ignorar validação SSL
+    }
     client.setTimeout((timeout_ms+999)/1000);
     HTTPClient https; https.setTimeout(timeout_ms); https.setFollowRedirects(follow);
     if (https.begin(client,url)){
       https.addHeader("User-Agent","NebulaWatch/1.0");
       https.addHeader("Accept","*/*");
+      if (strstr(url,"ngrok-free.app")) {
+        https.addHeader("ngrok-skip-browser-warning","true");
+      }
       code = https.GET();
       if (code<=0) code = https.sendRequest("HEAD");
       https.end();
@@ -82,6 +91,9 @@ uint16_t Net::httpPing(const char* url, uint16_t timeout_ms){
     if (http.begin(client,url)){
       http.addHeader("User-Agent","NebulaWatch/1.0");
       http.addHeader("Accept","*/*");
+      if (strstr(url,"ngrok-free.app")) {
+        http.addHeader("ngrok-skip-browser-warning","true");
+      }
       code = http.GET();
       if (code<=0) code = http.sendRequest("HEAD");
       http.end();

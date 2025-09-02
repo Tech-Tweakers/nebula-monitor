@@ -8,17 +8,72 @@
 #include "telegram.hpp"
 #include <lvgl.h>
 
-// Network targets
-const Target targets[] = {
-  {"Proxmox HV", "http://192.168.1.128:8006/", nullptr, PING, UNKNOWN, 0},
-  {"Router #1", "http://192.168.1.1", nullptr, PING, UNKNOWN, 0},
-  {"Router #2", "https://192.168.1.172", nullptr, PING, UNKNOWN, 0},
-  {"Polaris API", "https://pet-chem-independence-australia.trycloudflare.com", "/health", HEALTH_CHECK, UNKNOWN, 0},
-  {"Polaris INT", "http://ebfc52323306.ngrok-free.app", "/health", HEALTH_CHECK, UNKNOWN, 0},
-  {"Polaris WEB", "https://tech-tweakers.github.io/polaris-v2-web/#/", "health", HEALTH_CHECK, UNKNOWN, 0}
-};
+// Network targets - serão carregados dinamicamente do config.env
+static Target targets[10]; // Array dinâmico para targets
+static int N_TARGETS = 0;  // Número de targets carregados
 
-const int N_TARGETS = sizeof(targets) / sizeof(targets[0]);
+// Função para carregar targets do ConfigManager
+void loadTargetsFromConfig() {
+  N_TARGETS = ConfigManager::getTargetCount();
+  Serial.printf("[MAIN] Carregando %d targets do config.env\n", N_TARGETS);
+  
+  // Verificação de segurança - se não há targets, usar valores padrão
+  if (N_TARGETS == 0) {
+    Serial.println("[MAIN] AVISO: Nenhum target encontrado no config.env, usando valores padrão!");
+    N_TARGETS = 6; // Usar 6 targets padrão
+    
+    // Targets padrão hardcoded como fallback
+    const char* defaultTargets[][4] = {
+      {"Proxmox HV", "http://192.168.1.128:8006/", "", "PING"},
+      {"Router #1", "http://192.168.1.1", "", "PING"},
+      {"Router #2", "https://192.168.1.172", "", "PING"},
+      {"Polaris API", "https://pet-chem-independence-australia.trycloudflare.com", "/health", "HEALTH_CHECK"},
+      {"Polaris INT", "http://ebfc52323306.ngrok-free.app", "/health", "PING"},
+      {"Polaris WEB", "https://tech-tweakers.github.io/polaris-v2-web", "", "PING"}
+    };
+    
+    for (int i = 0; i < N_TARGETS; i++) {
+      targets[i].name = strdup(defaultTargets[i][0]);
+      targets[i].url = strdup(defaultTargets[i][1]);
+      targets[i].health_endpoint = strlen(defaultTargets[i][2]) > 0 ? strdup(defaultTargets[i][2]) : nullptr;
+      targets[i].monitor_type = strcmp(defaultTargets[i][3], "HEALTH_CHECK") == 0 ? HEALTH_CHECK : PING;
+      targets[i].st = UNKNOWN;
+      targets[i].lat_ms = 0;
+      
+      Serial.printf("[MAIN] Target padrão %d: %s | %s | %s | %s\n", 
+                   i, defaultTargets[i][0], defaultTargets[i][1], 
+                   strlen(defaultTargets[i][2]) > 0 ? defaultTargets[i][2] : "null",
+                   defaultTargets[i][3]);
+    }
+    return;
+  }
+  
+  for (int i = 0; i < N_TARGETS; i++) {
+    String name = ConfigManager::getTargetName(i);
+    String url = ConfigManager::getTargetUrl(i);
+    String healthEndpoint = ConfigManager::getTargetHealthEndpoint(i);
+    String monitorType = ConfigManager::getTargetMonitorType(i);
+    
+    // Converter string para MonitorType
+    MonitorType type = PING;
+    if (monitorType.equalsIgnoreCase("HEALTH_CHECK")) {
+      type = HEALTH_CHECK;
+    }
+    
+    // Alocar strings dinamicamente
+    targets[i].name = strdup(name.c_str());
+    targets[i].url = strdup(url.c_str());
+    targets[i].health_endpoint = healthEndpoint.length() > 0 ? strdup(healthEndpoint.c_str()) : nullptr;
+    targets[i].monitor_type = type;
+    targets[i].st = UNKNOWN;
+    targets[i].lat_ms = 0;
+    
+    Serial.printf("[MAIN] Target %d: %s | %s | %s | %s\n", 
+         i, name.c_str(), url.c_str(), 
+         healthEndpoint.length() > 0 ? healthEndpoint.c_str() : "null",
+         monitorType.c_str());
+  }
+}
 
 // LVGL objects
 static lv_obj_t* main_screen;
@@ -27,6 +82,22 @@ static lv_obj_t* tile_containers[6]; // Fixed size for now
 static lv_obj_t* status_labels[6]; // Status items for scanner updates
 static lv_obj_t* name_labels[6]; // Name labels for scanner updates
 static lv_obj_t* latency_labels[6]; // Latency labels for scanner updates
+
+// Detail window objects
+static lv_obj_t* detail_window = nullptr;
+static lv_obj_t* detail_label = nullptr;
+static bool detail_window_open = false;
+
+// Function to close detail window
+void closeDetailWindow() {
+  if (detail_window_open && detail_window) {
+    lv_obj_del(detail_window);
+    detail_window = nullptr;
+    detail_label = nullptr;
+    detail_window_open = false;
+
+  }
+}
 
 // Scanner integration variables
 static unsigned long last_scan_time = 0;
@@ -52,22 +123,61 @@ static bool telegram_initialized = false;
 static bool footer_pressed = false;
 static unsigned long footer_press_start = 0;
 
+// Global touch filter variables
+static unsigned long last_touch_time = 0;
+static const unsigned long TOUCH_FILTER_MS = 500; // 500ms filter
+
+// Function to show detail window
+void showDetailWindow(int target_index) {
+  if (detail_window_open || target_index < 0 || target_index >= N_TARGETS) {
+    return;
+  }
+  
+  // Create detail window (modal)
+  detail_window = lv_obj_create(main_screen);
+  lv_obj_set_size(detail_window, 200, 120);
+  lv_obj_center(detail_window);
+  lv_obj_set_style_bg_color(detail_window, lv_color_hex(0x666666), LV_PART_MAIN); // Gray background
+  lv_obj_set_style_border_width(detail_window, 2, LV_PART_MAIN);
+  lv_obj_set_style_border_color(detail_window, lv_color_hex(0x999999), LV_PART_MAIN);
+  lv_obj_set_style_radius(detail_window, 10, LV_PART_MAIN);
+  lv_obj_set_style_pad_all(detail_window, 20, LV_PART_MAIN);
+  
+  // Create detail label with target name
+  detail_label = lv_label_create(detail_window);
+  lv_label_set_text(detail_label, targets[target_index].name);
+  lv_obj_set_style_text_color(detail_label, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+  lv_obj_set_style_text_font(detail_label, LV_FONT_DEFAULT, LV_PART_MAIN);
+  lv_obj_center(detail_label);
+  
+  detail_window_open = true;
+
+}
+
 // Function to update scan status indicator
 void updateScanStatusIndicator() {
   if (wifi_indicator_ref) {
     bool isScanning = ScanManager::isActive();
     bool isTelegramSending = TelegramAlerts::isSendingMessage();
+    bool hasActiveAlerts = TelegramAlerts::hasActiveAlerts();
     
     if (isTelegramSending) {
-      // Red when sending Telegram messages
-      lv_obj_set_style_bg_color(wifi_indicator_ref, lv_color_hex(0x0000FF), LV_PART_MAIN); // Red (inverted)
+      // Blue when sending Telegram messages
+      lv_obj_set_style_bg_color(wifi_indicator_ref, lv_color_hex(0x0000FF), LV_PART_MAIN); // Blue (inverted)
     } else if (isScanning) {
-      // Orange when scanning (touch may be slow)
-      lv_obj_set_style_bg_color(wifi_indicator_ref, lv_color_hex(0x00FFFF), LV_PART_MAIN); // Orange (inverted)
+      // Red when scanning (system busy)
+      lv_obj_set_style_bg_color(wifi_indicator_ref, lv_color_hex(0x0000FF), LV_PART_MAIN); // Red (inverted)
+    } else if (hasActiveAlerts) {
+      // Yellow when there are active alerts
+      lv_obj_set_style_bg_color(wifi_indicator_ref, lv_color_hex(0x00FFFF), LV_PART_MAIN); // Yellow (inverted)
     } else {
       // Green when free (touch responsive)
       lv_obj_set_style_bg_color(wifi_indicator_ref, lv_color_hex(0xFF00FF), LV_PART_MAIN); // Green (inverted)
     }
+    
+    // Force visual update - CRUCIAL para mostrar a mudança de cor!
+    lv_obj_invalidate(wifi_indicator_ref);
+    lv_refr_now(lv_disp_get_default()); // Força refresh imediato da tela
   }
 }
 
@@ -78,43 +188,72 @@ void updateFooterContent() {
   char line[60];
   
   switch (footer_mode) {
-    case 0: // System Status
+    case 0: // System Status - only calculate when needed
       {
-        int active_alerts = 0, targets_up = 0;
-        for (int i = 0; i < N_TARGETS; i++) {
-          if (ScanManager::getTargetStatus(i) == DOWN) active_alerts++;
-          if (ScanManager::getTargetStatus(i) == UP) targets_up++;
+        static int last_active_alerts = -1, last_targets_up = -1;
+        static unsigned long last_targets_calc = 0;
+        
+        // Only recalculate targets every 2 seconds to save CPU
+        if (millis() - last_targets_calc >= 2000) {
+          int active_alerts = 0, targets_up = 0;
+          for (int i = 0; i < N_TARGETS; i++) {
+            if (ScanManager::getTargetStatus(i) == DOWN) active_alerts++;
+            if (ScanManager::getTargetStatus(i) == UP) targets_up++;
+          }
+          last_active_alerts = active_alerts;
+          last_targets_up = targets_up;
+          last_targets_calc = millis();
         }
-        snprintf(line, sizeof(line), "Sys: %s | Alt: %d | %d/%d UP", 
-                 telegram_initialized ? "OK" : "OFF", active_alerts, targets_up, N_TARGETS);
+        
+        snprintf(line, sizeof(line), "Alerting: %d | Online: %d/%d", 
+                 last_active_alerts, last_targets_up, N_TARGETS);
       }
       break;
       
     case 1: // Network Info
-      snprintf(line, sizeof(line), "IP: %s | %d dBm | %ds", 
-               WiFi.localIP().toString().c_str(), WiFi.RSSI(), SCAN_INTERVAL / 1000);
+      snprintf(line, sizeof(line), "%s | %d dBm | %ds", 
+               WiFi.localIP().toString().c_str(), WiFi.RSSI(), SCAN_INTERVAL / 120000);
       break;
       
-    case 2: // Performance
+    case 2: // Performance - cache expensive calculations
       {
+        static int last_cpu = 0, last_ram = 0;
+        static unsigned long last_perf_calc = 0;
+        
+        // Only recalculate CPU/RAM every 1 second to save CPU
+        if (millis() - last_perf_calc >= 1000) {
+          last_cpu = (int)((millis() % 1000) / 10);
+          last_ram = (int)(ESP.getFreeHeap() * 100 / ESP.getHeapSize());
+          last_perf_calc = millis();
+        }
+        
         unsigned long uptime_seconds = (millis() - start_time) / 1000;
         unsigned long hours = uptime_seconds / 3600;
         unsigned long minutes = (uptime_seconds % 3600) / 60;
-        snprintf(line, sizeof(line), "CPU: %d%% | RAM: %d%% | UP: %02lu:%02lu", 
-                 (int)((millis() % 1000) / 10), (int)(ESP.getFreeHeap() * 100 / ESP.getHeapSize()), hours, minutes);
+        snprintf(line, sizeof(line), "Cpu: %d%% | Ram: %d%%", 
+                 last_cpu, last_ram);
       }
       break;
       
-    case 3: // Target Details
+    case 3: // Target Details - reuse cached values from mode 0
       {
-        int targets_up = 0, targets_down = 0;
-        for (int i = 0; i < N_TARGETS; i++) {
-          if (ScanManager::getTargetStatus(i) == UP) targets_up++;
-          else if (ScanManager::getTargetStatus(i) == DOWN) targets_down++;
+        static int last_targets_up = 0, last_targets_down = 0;
+        static unsigned long last_targets_calc = 0;
+        
+        // Only recalculate targets every 2 seconds to save CPU
+        if (millis() - last_targets_calc >= 2000) {
+          int targets_up = 0, targets_down = 0;
+          for (int i = 0; i < N_TARGETS; i++) {
+            if (ScanManager::getTargetStatus(i) == UP) targets_up++;
+            else if (ScanManager::getTargetStatus(i) == DOWN) targets_down++;
+          }
+          last_targets_up = targets_up;
+          last_targets_down = targets_down;
+          last_targets_calc = millis();
         }
-        snprintf(line, sizeof(line), "UP: %d | DN: %d | UNK: %d | %s", 
-                 targets_up, targets_down, N_TARGETS - targets_up - targets_down,
-                 ScanManager::isActive() ? "SCAN" : "IDLE");
+        
+        snprintf(line, sizeof(line), "UP: %d | DW: %d | %s", 
+                 last_targets_up, last_targets_down, ScanManager::isActive() ? "SCAN" : "IDLE");
       }
       break;
       
@@ -123,16 +262,16 @@ void updateFooterContent() {
         unsigned long uptime_seconds = (millis() - start_time) / 1000;
         unsigned long hours = uptime_seconds / 3600;
         unsigned long minutes = (uptime_seconds % 3600) / 60;
-        snprintf(line, sizeof(line), "UP: %02lu:%02lu | RAM: %dKB | Next: %ds", 
+        snprintf(line, sizeof(line), "Up: %02lu:%02lu | Rom: %dKB | Nx: %ds", 
                  hours, minutes, ESP.getFreeHeap() / 1024,
-                 (SCAN_INTERVAL - (millis() - last_scan_time)) / 1000);
+                 (SCAN_INTERVAL - (millis() - last_scan_time)) / 120000);
       }
       break;
   }
   
   lv_label_set_text(uptime_label_ref, line);
 }
-static const unsigned long FOOTER_LONG_PRESS_TIME = 500; // 2 seconds for long press
+static const unsigned long FOOTER_LONG_PRESS_TIME = 500; // press sensitivity
 
 // Footer click callback
 void footer_click_cb(lv_event_t* e) {
@@ -154,21 +293,48 @@ void footer_click_cb(lv_event_t* e) {
 
 void setup() {
   Serial.begin(115200);
-  Serial.println("[MAIN] Iniciando Nebula Monitor v2.2...");
+  LOGLN("[MAIN] Iniciando Nebula Monitor v2.2...");
+  
+  // Inicializar ConfigManager
+  Serial.println("[MAIN] Inicializando ConfigManager...");
+  if (!ConfigManager::begin()) {
+    Serial.println("[MAIN] ERRO: Falha ao inicializar ConfigManager!");
+    Serial.println("[MAIN] Continuando com valores padrão...");
+    // Continue com valores padrão
+  } else {
+    Serial.println("[MAIN] ConfigManager inicializado com sucesso!");
+    ConfigManager::printAllConfigs();
+    
+    // Inicializar variáveis de debug
+    DEBUG_LOGS_ENABLED = ConfigManager::isDebugLogsEnabled();
+    TOUCH_LOGS_ENABLED = ConfigManager::isTouchLogsEnabled();
+    ALL_LOGS_ENABLED = ConfigManager::isAllLogsEnabled();
+    
+    Serial.printf("[MAIN] Debug configurado: DEBUG=%s, TOUCH=%s, ALL=%s\n",
+                  DEBUG_LOGS_ENABLED ? "ON" : "OFF",
+                  TOUCH_LOGS_ENABLED ? "ON" : "OFF", 
+                  ALL_LOGS_ENABLED ? "ON" : "OFF");
+  }
+  
+  // Carregar targets do config.env
+  Serial.println("[MAIN] Carregando targets...");
+  loadTargetsFromConfig();
+  Serial.printf("[MAIN] %d targets carregados com sucesso!\n", N_TARGETS);
   
   // Connect to WiFi
-  Serial.println("[MAIN] Conectando ao WiFi...");
+  LOGLN("[MAIN] Conectando ao WiFi...");
   if (!Net::connectWiFi(WIFI_SSID, WIFI_PASS)) {
-    Serial.println("[MAIN] ERRO: Falha ao conectar WiFi!");
+    LOGLN("[MAIN] ERRO: Falha ao conectar WiFi!");
     // Continue anyway, maybe WiFi will connect later
   } else {
-    Serial.println("[MAIN] WiFi conectado com sucesso!");
+    LOGLN("[MAIN] WiFi conectado com sucesso!");
     Net::printInfo();
   }
   
   start_time = millis(); // Initialize start time for uptime calculation
 
   // Initialize display
+  Serial.println("[MAIN] Inicializando display...");
   if (!DisplayManager::begin()) {
     Serial.println("[MAIN] ERRO: Falha ao inicializar display!");
     return;
@@ -177,34 +343,33 @@ void setup() {
 
   // Initialize touch
   if (!Touch::beginHSPI()) {
-    Serial.println("[MAIN] ERRO: Falha ao inicializar touch!");
+    LOGLN("[MAIN] ERRO: Falha ao inicializar touch!");
     return;
   }
-  Serial.println("[MAIN] Touch inicializado com sucesso!");
+  LOGLN("[MAIN] Touch inicializado com sucesso!");
 
   // Initialize network scanner
   if (!ScanManager::begin(targets, N_TARGETS)) {
-    Serial.println("[MAIN] ERRO: Falha ao inicializar scanner!");
+    LOGLN("[MAIN] ERRO: Falha ao inicializar scanner!");
     return;
   }
-  ScanManager::startScanning(); // Start the scanner
   scanner_initialized = true;
-  Serial.println("[MAIN] Scanner inicializado com sucesso!");
+  LOGLN("[MAIN] Scanner inicializado com sucesso!");
 
   // Initialize Telegram alerts
   if (initTelegramAlerts()) {
-    Serial.println("[MAIN] Sistema de alertas Telegram inicializado!");
+    LOGLN("[MAIN] Sistema de alertas Telegram inicializado!");
     telegram_initialized = true;
     // Enviar mensagem de inicialização
     delay(2000); // Aguardar um pouco
     sendTestTelegramAlert();
   } else {
-    Serial.println("[MAIN] Sistema de alertas Telegram não inicializado (configuração necessária)");
+    LOGLN("[MAIN] Sistema de alertas Telegram não inicializado (configuração necessária)");
     telegram_initialized = false;
   }
   
   // Verificar status do Telegram
-  Serial.printf("[MAIN] Status do Telegram: %s\n", telegram_initialized ? "INICIALIZADO" : "NÃO INICIALIZADO");
+  LOGF("[MAIN] Status do Telegram: %s\n", telegram_initialized ? "INICIALIZADO" : "NÃO INICIALIZADO");
 
   // Initialize LVGL screen
   main_screen = lv_scr_act();
@@ -303,12 +468,19 @@ void setup() {
   lv_label_set_text(footer_main_text, "Sys: OK | Alt: 0 | 6/6 UP");
   lv_obj_set_style_text_color(footer_main_text, lv_color_hex(0xCCCCCC), LV_PART_MAIN);
   lv_obj_set_style_text_font(footer_main_text, LV_FONT_DEFAULT, LV_PART_MAIN);
-  lv_obj_set_style_text_align(footer_main_text, LV_TEXT_ALIGN_LEFT, LV_PART_MAIN);
+  lv_obj_set_style_text_align(footer_main_text, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
   
   // Store references for dynamic updates
   uptime_label_ref = footer_main_text;
   footer_ref = footer;
 
+  // Initialize scan status indicator
+  updateScanStatusIndicator();
+  
+  // Start scanning after everything is initialized
+  ScanManager::startScanning();
+  Serial.println("[MAIN] Scanner iniciado!");
+  
   Serial.println("[MAIN] Setup completo! Interface pronta com footer!");
 }
 
@@ -332,11 +504,13 @@ void loop() {
 
   // Handle network scanning
   if (scanner_initialized) {
+    // Update scan status indicator FIRST - before any blocking operations
+    updateScanStatusIndicator();
+    
     // Update scanner state machine
     ScanManager::update();
     
-    // Update scan status indicator
-    updateScanStatusIndicator();
+
     
     // Check if we need to update display
     if (millis() - last_scan_time >= SCAN_INTERVAL) {
@@ -400,11 +574,10 @@ void loop() {
       Serial.println("[SCANNER] Display atualizado!");
     }
     
-    // Update footer based on current mode
+    // Update footer based on current mode - only when footer is visible
     if (millis() - last_uptime_update >= UPTIME_UPDATE_INTERVAL) {
+      // Only update footer content, don't do heavy calculations
       updateFooterContent();
-
-
       last_uptime_update = millis();
     }
   }
@@ -418,15 +591,22 @@ void loop() {
     last_telegram_check = millis();
   }
 
-  // Handle touch input
+  // Handle touch input with global filter
   if (Touch::touched()) {
+    // Apply global touch filter (500ms)
+    unsigned long current_time = millis();
+    if (current_time - last_touch_time < TOUCH_FILTER_MS) {
+      return; // Ignore touch if within filter period
+    }
+    last_touch_time = current_time;
+    
     int16_t raw_x, raw_y, z;
     Touch::readRaw(raw_x, raw_y, z);
     
     int screen_x, screen_y;
     Touch::mapRawToScreen(raw_x, raw_y, screen_x, screen_y);
     
-    TOUCH_LOGF("[TOUCH] Touch detectado em (%d, %d)\n", screen_x, screen_y);
+    TOUCH_LOGF("[TOUCH] Touch detectado em (%d, %d) - Filtro aplicado\n", screen_x, screen_y);
     
     // Check if footer was touched
     if (footer_ref) {
@@ -482,6 +662,20 @@ void loop() {
       }
     }
     
+    // Check if detail window is open and was touched
+    if (detail_window_open && detail_window) {
+      lv_area_t window_area;
+      lv_obj_get_coords(detail_window, &window_area);
+      
+      if (screen_x >= window_area.x1 && screen_x < window_area.x2 && 
+          screen_y >= window_area.y1 && screen_y < window_area.y2) {
+        // Detail window was touched - close it
+        closeDetailWindow();
+        TOUCH_LOGLN("[TOUCH] Janela de detalhes fechada por toque");
+        return; // Exit early since window was closed
+      }
+    }
+    
     // Check which status item was touched
     for (int i = 0; i < N_TARGETS; i++) {
       lv_area_t area;
@@ -490,13 +684,11 @@ void loop() {
       if (screen_x >= area.x1 && screen_x < area.x2 && 
           screen_y >= area.y1 && screen_y < area.y2) {
         
-        // Generate random color for visual feedback
-        uint32_t randomColor = random(0x100000, 0xFFFFFF);
-        lv_obj_set_style_bg_color(status_labels[i], lv_color_hex(randomColor), LV_PART_MAIN);
-        lv_obj_invalidate(status_labels[i]);
+        TOUCH_LOGF("[TOUCH] Status item %d (%s) tocado\n", 
+                     i, targets[i].name);
         
-        TOUCH_LOGF("[TOUCH] Status item %d (%s) tocado - Cor: #%06X\n", 
-                     i, targets[i].name, randomColor);
+        // Show detail window
+        showDetailWindow(i);
         break;
       }
     }

@@ -13,12 +13,9 @@ private:
 public:
   // Inicialização
   static bool begin();
-  static void end();
+  // static void end(); - removida (não utilizada)
   
-  // Configuração
-  static void setBotToken(const char* token);
-  static void setChatId(const char* id);
-  static void enable(bool enabled = true);
+  // Configuração - funções removidas (não utilizadas)
   
   // Controle de alertas
   static void updateTargetStatus(int targetIndex, Status newStatus, uint16_t latency);
@@ -44,7 +41,8 @@ public:
   }
   static bool isSendingMessage() { return sendingMessage; }
   static int getFailureCount(int targetIndex);
-  static void resetFailureCount(int targetIndex);
+  // static void resetFailureCount(int targetIndex); - removida (não utilizada)
+  static bool hasActiveAlerts(); // Verifica se há alertas ativos
 };
 
 // Funções de conveniência

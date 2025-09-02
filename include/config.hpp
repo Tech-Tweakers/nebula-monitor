@@ -2,8 +2,11 @@
 
 #include <TFT_eSPI.h>
 #include <SPI.h>
+#include <stdarg.h>
+#include "config_manager.hpp"
 
 // ----------------- Hardware base -----------------
+// Valores padrão - serão sobrescritos pelo ConfigManager
 static constexpr uint8_t ROT    = 2;   // rotação landscape (como no tutorial)
 static constexpr int     BL_PIN = 27;  // backlight
 
@@ -20,14 +23,14 @@ static constexpr int RAW_X_MAX = 3700;
 static constexpr int RAW_Y_MIN = 240;
 static constexpr int RAW_Y_MAX = 3800;
 
-// WiFi credentials
-#define WIFI_SSID "Polaris"
-#define WIFI_PASS "55548502"
+// WiFi credentials - serão lidos do config.env
+#define WIFI_SSID ConfigManager::getWifiSSID().c_str()
+#define WIFI_PASS ConfigManager::getWifiPass().c_str()
 
-// Telegram Bot Configuration
-#define TELEGRAM_BOT_TOKEN "8160557136:AAFvJf0wYywnzyoVWPG8AU1GZrWH9Kdg6yY"
-#define TELEGRAM_CHAT_ID "6743862062"
-#define TELEGRAM_ENABLED true
+// Telegram Bot Configuration - serão lidos do config.env
+#define TELEGRAM_BOT_TOKEN ConfigManager::getTelegramBotToken().c_str()
+#define TELEGRAM_CHAT_ID ConfigManager::getTelegramChatId().c_str()
+#define TELEGRAM_ENABLED ConfigManager::isTelegramEnabled()
 
 // RGB color conversion macro
 #define RGB(r,g,b) (((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3))
@@ -72,33 +75,49 @@ struct AlertState {
   unsigned long downtime_start;  // Timestamp quando ficou DOWN
 };
 
-// Configurações de alertas
-#define MAX_FAILURES_BEFORE_ALERT 3
-#define ALERT_COOLDOWN_MS 300000  // 5 minutos entre alertas
-#define ALERT_RECOVERY_COOLDOWN_MS 60000  // 1 minuto para alerta de recuperação
+// Configurações de alertas - serão lidas do config.env
+#define MAX_FAILURES_BEFORE_ALERT ConfigManager::getMaxFailuresBeforeAlert()
+#define ALERT_COOLDOWN_MS ConfigManager::getAlertCooldownMs()  // 5 minutos entre alertas
+#define ALERT_RECOVERY_COOLDOWN_MS ConfigManager::getAlertRecoveryCooldownMs()  // 1 minuto para alerta de recuperação
 
-// Configurações de debug
-#define DEBUG_LOGS_ENABLED false  // true = logs ativos, false = logs desabilitados
-#define TOUCH_LOGS_ENABLED false  // true = logs de touch ativos, false = logs de touch desabilitados
+// Configurações de debug - serão lidas do config.env
+// Usar variáveis estáticas em vez de macros para permitir chamadas de função
+static bool DEBUG_LOGS_ENABLED = false;  // Será inicializado pelo ConfigManager
+static bool TOUCH_LOGS_ENABLED = false;  // Será inicializado pelo ConfigManager  
+static bool ALL_LOGS_ENABLED = true;     // Será inicializado pelo ConfigManager
 
-// Macro para logs condicionais
-#if DEBUG_LOGS_ENABLED
-  #define DEBUG_LOG(x) Serial.print(x)
-  #define DEBUG_LOGF(x, ...) Serial.printf(x, __VA_ARGS__)
-  #define DEBUG_LOGLN(x) Serial.println(x)
-#else
-  #define DEBUG_LOG(x)
-  #define DEBUG_LOGF(x, ...)
-  #define DEBUG_LOGLN(x)
-#endif
+// Funções para logs condicionais (runtime)
+inline void DEBUG_LOG(const String& x) { if (DEBUG_LOGS_ENABLED) Serial.print(x); }
+inline void DEBUG_LOGF(const char* format, ...) { 
+  if (DEBUG_LOGS_ENABLED) {
+    va_list args;
+    va_start(args, format);
+    Serial.printf(format, args);
+    va_end(args);
+  }
+}
+inline void DEBUG_LOGLN(const String& x) { if (DEBUG_LOGS_ENABLED) Serial.println(x); }
 
-// Macro para logs de touch condicionais
-#if TOUCH_LOGS_ENABLED
-  #define TOUCH_LOG(x) Serial.print(x)
-  #define TOUCH_LOGF(x, ...) Serial.printf(x, __VA_ARGS__)
-  #define TOUCH_LOGLN(x) Serial.println(x)
-#else
-  #define TOUCH_LOG(x)
-  #define TOUCH_LOGF(x, ...)
-  #define TOUCH_LOGLN(x)
-#endif
+// Funções para logs de touch condicionais
+inline void TOUCH_LOG(const String& x) { if (TOUCH_LOGS_ENABLED) Serial.print(x); }
+inline void TOUCH_LOGF(const char* format, ...) { 
+  if (TOUCH_LOGS_ENABLED) {
+    va_list args;
+    va_start(args, format);
+    Serial.printf(format, args);
+    va_end(args);
+  }
+}
+inline void TOUCH_LOGLN(const String& x) { if (TOUCH_LOGS_ENABLED) Serial.println(x); }
+
+// Funções para TODOS os logs condicionais (MÁXIMA PERFORMANCE)
+inline void LOG(const String& x) { if (ALL_LOGS_ENABLED) Serial.print(x); }
+inline void LOGF(const char* format, ...) { 
+  if (ALL_LOGS_ENABLED) {
+    va_list args;
+    va_start(args, format);
+    Serial.printf(format, args);
+    va_end(args);
+  }
+}
+inline void LOGLN(const String& x) { if (ALL_LOGS_ENABLED) Serial.println(x); }
