@@ -46,8 +46,8 @@
 - **📁 External Configuration**: All settings managed via `config.env` file on SPIFFS
 - **🚨 Telegram Alert System**: Real-time notifications for service outages and recoveries
 - **🔄 Hybrid Monitoring**: PING for basic connectivity + Health Check for API endpoints
-- **📊 Intelligent Footer**: 5 modes of system information with compact display
-- **🎯 Visual Scan Indicator**: Bolinha verde/vermelha/amarela shows scan status and alerts
+- **📊 Intelligent Footer**: 5 modes of system information with compact display (centered text)
+- **🔵🔴🟢 Hardware Status LED**: Primary-color LED shows system status (Blue scan/Telegram, Red DOWN, Green OK)
 - **⚡ Performance Optimized**: 30s scan intervals, conditional logging, touch optimized
 - **🎮 Touch Interface**: Interactive LVGL-based UI with responsive touch controls
 - **🌐 WiFi Management**: Automatic connection and reconnection handling
@@ -88,8 +88,8 @@
 - **Touch Controls**: Full touch support with visual feedback
 - **Color-coded Status**: Intuitive color system for quick status recognition
 - **Dynamic Updates**: Real-time UI updates without flickering
-- **Smart Footer**: 5 modes of system information (System, Network, Performance, Targets, Uptime)
-<!-- Removed Visual Scan Indicator pending redesign -->
+- **Smart Footer**: 5 modes of system information (System, Network, Performance, Targets, Uptime) with centered text
+- **LED Synchronization**: Screen, footer and LED update in lockstep at scan start/finish
 - **Compact Display**: Abbreviated text for maximum information density
 
 ### 🔧 Advanced System Features
@@ -99,6 +99,7 @@
 - **Conditional Logging**: Debug logs can be enabled/disabled for performance
 - **Touch Optimization**: 10ms delay for improved touch responsiveness
 - **Scan Management**: Intelligent scan state management with proper start/stop
+ - **Scan Callbacks**: Start/complete callbacks synchronize UI refresh, footer, and LED in the same cycle
 
 ## 🚨 Telegram Alerts
 
@@ -247,6 +248,18 @@ TARGET_3=Router #2|https://192.168.1.172||PING
 TARGET_4=Polaris API|https://api.example.com|/health|HEALTH_CHECK
 TARGET_5=Polaris INT|http://integration.example.com|/health|HEALTH_CHECK
 TARGET_6=Polaris WEB|https://web.example.com|/#/health|HEALTH_CHECK
+
+# LED (RGB Status)
+# Primary colors only: BLUE (scan/telegram), RED (down), GREEN (ok)
+LED_PIN_R=16
+LED_PIN_G=17
+LED_PIN_B=20
+LED_ACTIVE_HIGH=false
+LED_PWM_FREQ=5000
+LED_PWM_RES_BITS=8
+LED_BRIGHT_R=32
+LED_BRIGHT_G=12
+LED_BRIGHT_B=12
 ```
 
 ### 4️⃣ Upload Configuration and Firmware
