@@ -621,6 +621,17 @@ void loop() {
   else if (TelegramAlerts::isSendingMessage() || ScanManager::isActive()) setStatusLed(false, false, true);
   else setStatusLed(false, true, false);
 
+  // Wi-Fi fail-safe: blink RED when disconnected (overrides other states)
+  if (WiFi.status() != WL_CONNECTED) {
+    static unsigned long lastBlink = 0;
+    static bool on = false;
+    if (millis() - lastBlink >= 500) { // 500ms blink rate
+      on = !on;
+      lastBlink = millis();
+      setStatusLed(on, false, false);
+    }
+  }
+
   // Handle network scanning
   if (scanner_initialized) {
     // Update scanner state machine
