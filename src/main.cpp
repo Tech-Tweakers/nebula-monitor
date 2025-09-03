@@ -469,6 +469,47 @@ void setup() {
       lv_refr_now(lv_disp_get_default());
       // Mark display update time to align footer countdown
       last_scan_time = millis();
+    },
+    [](int idx, Status status, uint16_t latency){
+      // Atualiza somente o target afetado
+      if (idx >= 0 && idx < N_TARGETS) {
+        updateTelegramAlert(idx, status, latency);
+        if (status == UP && latency > 0) {
+          char latency_text[30];
+          const char* type_text = targets[idx].monitor_type == HEALTH_CHECK ? "OK" : "ms";
+          snprintf(latency_text, sizeof(latency_text), "%d %s", latency, type_text);
+          lv_label_set_text(latency_labels[idx], latency_text);
+          if (latency < 500) {
+            lv_obj_set_style_bg_color(status_labels[idx], lv_color_hex(0xFF00FF), LV_PART_MAIN);
+            lv_obj_set_style_text_color(latency_labels[idx], lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+            lv_obj_set_style_text_color(name_labels[idx], lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+          } else {
+            // Laranja (cor trabalhada via paleta invertida → azul aqui): mantemos cor de "slow"
+            lv_obj_set_style_bg_color(status_labels[idx], lv_color_hex(0x0086ff), LV_PART_MAIN);
+            lv_obj_set_style_text_color(latency_labels[idx], lv_color_hex(0x000000), LV_PART_MAIN);
+            lv_obj_set_style_text_color(name_labels[idx], lv_color_hex(0x000000), LV_PART_MAIN);
+          }
+        } else {
+          const char* down_text = targets[idx].monitor_type == HEALTH_CHECK ? "HEALTH FAIL" : "DOWN";
+          lv_label_set_text(latency_labels[idx], down_text);
+          lv_obj_set_style_bg_color(status_labels[idx], lv_color_hex(0x00FFFF), LV_PART_MAIN);
+          lv_obj_set_style_text_color(latency_labels[idx], lv_color_hex(0x000000), LV_PART_MAIN);
+          lv_obj_set_style_text_color(name_labels[idx], lv_color_hex(0x000000), LV_PART_MAIN);
+        }
+        lv_obj_invalidate(status_labels[idx]);
+
+        // Atualiza LED por target: se algum DOWN até aqui, LED vermelho; se scan ativo, azul; senão verde
+        bool anyDown = false;
+        for (int i = 0; i < N_TARGETS; i++) {
+          if (ScanManager::getTargetStatus(i) == DOWN) { anyDown = true; break; }
+        }
+        if (anyDown) setStatusLed(true, false, false);
+        else if (TelegramAlerts::isSendingMessage() || ScanManager::isActive()) setStatusLed(false, false, true);
+        else setStatusLed(false, true, false);
+
+        // Refresh parcial/imediato
+        lv_refr_now(lv_disp_get_default());
+      }
     }
   );
   scanner_initialized = true;

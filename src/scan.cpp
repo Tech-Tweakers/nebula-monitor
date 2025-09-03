@@ -12,6 +12,7 @@ uint32_t ScanManager::scanInterval = 30000; // 60 segundos padrão
 bool ScanManager::isScanning = false;
 void (*ScanManager::onScanStart)() = nullptr;
 void (*ScanManager::onScanComplete)() = nullptr;
+void (*ScanManager::onTargetScanned)(int, Status, uint16_t) = nullptr;
 
 // Estrutura local para armazenar resultados
 struct ScanResult {
@@ -118,6 +119,9 @@ void ScanManager::update() {
                      targets[i].name,
                      targets[i].monitor_type == HEALTH_CHECK ? "Health FAIL" : "Ping FAIL");
       }
+
+      // Callback por target para atualização imediata de UI/LED/footer
+      if (onTargetScanned) onTargetScanned(i, scanResults[i].st, scanResults[i].lat_ms);
       
       delay(200); // Pausa menor entre targets
       
