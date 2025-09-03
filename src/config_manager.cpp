@@ -303,3 +303,41 @@ void ConfigManager::printAllConfigs() {
   }
   Serial.println("[CONFIG] ==============================");
 }
+
+// LED (RGB Status)
+int ConfigManager::getLedPinR() {
+  return getValue("LED_PIN_R", "16").toInt();
+}
+
+int ConfigManager::getLedPinG() {
+  return getValue("LED_PIN_G", "17").toInt();
+}
+
+int ConfigManager::getLedPinB() {
+  return getValue("LED_PIN_B", "20").toInt();
+}
+
+bool ConfigManager::isLedActiveHigh() {
+  String v = getValue("LED_ACTIVE_HIGH", "false");
+  return v.equalsIgnoreCase("true");
+}
+
+int ConfigManager::getLedPwmFreq() {
+  return getValue("LED_PWM_FREQ", "5000").toInt();
+}
+
+int ConfigManager::getLedPwmResBits() {
+  return getValue("LED_PWM_RES_BITS", "8").toInt();
+}
+
+int ConfigManager::getLedBrightR() {
+  return getValue("LED_BRIGHT_R", "32").toInt();
+}
+
+int ConfigManager::getLedBrightG() {
+  return getValue("LED_BRIGHT_G", "12").toInt();
+}
+
+int ConfigManager::getLedBrightB() {
+  return getValue("LED_BRIGHT_B", "12").toInt();
+}

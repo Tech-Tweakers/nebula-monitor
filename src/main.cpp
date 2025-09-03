@@ -12,6 +12,68 @@
 static Target targets[10]; // Array dinâmico para targets
 static int N_TARGETS = 0;  // Número de targets carregados
 
+// RGB System Status LED config (runtime from ConfigManager)
+static int LED_PIN_R;
+static int LED_PIN_G;
+static int LED_PIN_B;
+static bool LED_ACTIVE_HIGH;
+
+// PWM (LEDC) configuration for dimming
+static const int LEDC_CHANNEL_R = 0;
+static const int LEDC_CHANNEL_G = 1;
+static const int LEDC_CHANNEL_B = 2;
+static int LEDC_FREQ;       // Hz
+static int LEDC_RES_BITS;   // bits
+
+// Per-channel base brightness (0-255). Medium-to-weak overall
+static int LED_BRIGHT_R;
+static int LED_BRIGHT_G;
+static int LED_BRIGHT_B;
+
+// Track last LED state to avoid redundant writes
+static int last_led_r = -1;
+static int last_led_g = -1;
+static int last_led_b = -1;
+
+inline void setStatusLed(bool r_on, bool g_on, bool b_on) {
+  // Compute target brightness per channel
+  const int r_brightness = r_on ? LED_BRIGHT_R : 0;
+  const int g_brightness = g_on ? LED_BRIGHT_G : 0;
+  const int b_brightness = b_on ? LED_BRIGHT_B : 0;
+
+  if (last_led_r == r_brightness && last_led_g == g_brightness && last_led_b == b_brightness) return;
+  last_led_r = r_brightness; last_led_g = g_brightness; last_led_b = b_brightness;
+
+  // Invert for common anode if needed
+  const int r_duty = LED_ACTIVE_HIGH ? r_brightness : (255 - r_brightness);
+  const int g_duty = LED_ACTIVE_HIGH ? g_brightness : (255 - g_brightness);
+  const int b_duty = LED_ACTIVE_HIGH ? b_brightness : (255 - b_brightness);
+
+  ledcWrite(LEDC_CHANNEL_R, r_duty);
+  ledcWrite(LEDC_CHANNEL_G, g_duty);
+  ledcWrite(LEDC_CHANNEL_B, b_duty);
+}
+
+inline void updateStatusLed() {
+  bool isScanning = ScanManager::isActive();
+  bool isTelegramSending = TelegramAlerts::isSendingMessage();
+  bool hasActiveAlerts = TelegramAlerts::hasActiveAlerts();
+
+  if (isTelegramSending) {
+    // Blue
+    setStatusLed(false, false, true);
+  } else if (isScanning) {
+    // Red
+    setStatusLed(true, false, false);
+  } else if (hasActiveAlerts) {
+    // Yellow (Red + Green)
+    setStatusLed(true, true, false);
+  } else {
+    // Green (idle/ok)
+    setStatusLed(false, true, false);
+  }
+}
+
 // Função para carregar targets do ConfigManager
 void loadTargetsFromConfig() {
   N_TARGETS = ConfigManager::getTargetCount();
@@ -154,32 +216,7 @@ void showDetailWindow(int target_index) {
 
 }
 
-// Function to update scan status indicator
-void updateScanStatusIndicator() {
-  if (wifi_indicator_ref) {
-    bool isScanning = ScanManager::isActive();
-    bool isTelegramSending = TelegramAlerts::isSendingMessage();
-    bool hasActiveAlerts = TelegramAlerts::hasActiveAlerts();
-    
-    if (isTelegramSending) {
-      // Blue when sending Telegram messages
-      lv_obj_set_style_bg_color(wifi_indicator_ref, lv_color_hex(0x0000FF), LV_PART_MAIN); // Blue (inverted)
-    } else if (isScanning) {
-      // Red when scanning (system busy)
-      lv_obj_set_style_bg_color(wifi_indicator_ref, lv_color_hex(0x0000FF), LV_PART_MAIN); // Red (inverted)
-    } else if (hasActiveAlerts) {
-      // Yellow when there are active alerts
-      lv_obj_set_style_bg_color(wifi_indicator_ref, lv_color_hex(0x00FFFF), LV_PART_MAIN); // Yellow (inverted)
-    } else {
-      // Green when free (touch responsive)
-      lv_obj_set_style_bg_color(wifi_indicator_ref, lv_color_hex(0xFF00FF), LV_PART_MAIN); // Green (inverted)
-    }
-    
-    // Force visual update - CRUCIAL para mostrar a mudança de cor!
-    lv_obj_invalidate(wifi_indicator_ref);
-    lv_refr_now(lv_disp_get_default()); // Força refresh imediato da tela
-  }
-}
+// (Removed) scan status indicator
 
 // Function to update footer with all modes (single line, abbreviated)
 void updateFooterContent() {
@@ -341,6 +378,26 @@ void setup() {
   }
   Serial.println("[MAIN] Display inicializado com sucesso!");
 
+  // Load LED configuration
+  LED_PIN_R = ConfigManager::getLedPinR();
+  LED_PIN_G = ConfigManager::getLedPinG();
+  LED_PIN_B = ConfigManager::getLedPinB();
+  LED_ACTIVE_HIGH = ConfigManager::isLedActiveHigh();
+  LEDC_FREQ = ConfigManager::getLedPwmFreq();
+  LEDC_RES_BITS = ConfigManager::getLedPwmResBits();
+  LED_BRIGHT_R = ConfigManager::getLedBrightR();
+  LED_BRIGHT_G = ConfigManager::getLedBrightG();
+  LED_BRIGHT_B = ConfigManager::getLedBrightB();
+
+  // Initialize RGB status LED PWM
+  ledcSetup(LEDC_CHANNEL_R, LEDC_FREQ, LEDC_RES_BITS);
+  ledcSetup(LEDC_CHANNEL_G, LEDC_FREQ, LEDC_RES_BITS);
+  ledcSetup(LEDC_CHANNEL_B, LEDC_FREQ, LEDC_RES_BITS);
+  ledcAttachPin(LED_PIN_R, LEDC_CHANNEL_R);
+  ledcAttachPin(LED_PIN_G, LEDC_CHANNEL_G);
+  ledcAttachPin(LED_PIN_B, LEDC_CHANNEL_B);
+  setStatusLed(false, false, false); // start off
+
   // Initialize touch
   if (!Touch::beginHSPI()) {
     LOGLN("[MAIN] ERRO: Falha ao inicializar touch!");
@@ -353,6 +410,67 @@ void setup() {
     LOGLN("[MAIN] ERRO: Falha ao inicializar scanner!");
     return;
   }
+  // Wire scan callbacks to sync UI + LED exactly at start/end
+  ScanManager::setCallbacks(
+    [](){
+      // Scan started: set LED to blue (scan state), refresh footer immediately
+      setStatusLed(false, false, true);
+      updateFooterContent();
+      lv_refr_now(lv_disp_get_default());
+    },
+    [](){
+      // Scan completed: update UI list from latest results, footer and LED coherently
+      for (int i = 0; i < N_TARGETS; i++) {
+        Status status = ScanManager::getTargetStatus(i);
+        uint16_t latency = ScanManager::getTargetLatency(i);
+        // Update alert state per target immediately
+        updateTelegramAlert(i, status, latency);
+        if (status == UP && latency > 0) {
+          char latency_text[30];
+          const char* type_text = targets[i].monitor_type == HEALTH_CHECK ? "OK" : "ms";
+          snprintf(latency_text, sizeof(latency_text), "%d %s", latency, type_text);
+          lv_label_set_text(latency_labels[i], latency_text);
+          if (latency < 500) {
+            lv_obj_set_style_bg_color(status_labels[i], lv_color_hex(0xFF00FF), LV_PART_MAIN);
+            lv_obj_set_style_text_color(latency_labels[i], lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+            lv_obj_set_style_text_color(name_labels[i], lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+          } else {
+            lv_obj_set_style_bg_color(status_labels[i], lv_color_hex(0x0086ff), LV_PART_MAIN);
+            lv_obj_set_style_text_color(latency_labels[i], lv_color_hex(0x000000), LV_PART_MAIN);
+            lv_obj_set_style_text_color(name_labels[i], lv_color_hex(0x000000), LV_PART_MAIN);
+          }
+        } else {
+          const char* down_text = targets[i].monitor_type == HEALTH_CHECK ? "HEALTH FAIL" : "DOWN";
+          lv_label_set_text(latency_labels[i], down_text);
+          lv_obj_set_style_bg_color(status_labels[i], lv_color_hex(0x00FFFF), LV_PART_MAIN);
+          lv_obj_set_style_text_color(latency_labels[i], lv_color_hex(0x000000), LV_PART_MAIN);
+          lv_obj_set_style_text_color(name_labels[i], lv_color_hex(0x000000), LV_PART_MAIN);
+        }
+        lv_obj_invalidate(status_labels[i]);
+      }
+      // Footer reflects latest status
+      updateFooterContent();
+
+      // LED based on alerts: any DOWN? -> RED; else if Telegram sending or scanning -> BLUE; else GREEN
+      bool anyDown = false;
+      for (int i = 0; i < N_TARGETS; i++) {
+        Status s = ScanManager::getTargetStatus(i);
+        if (s == DOWN) { anyDown = true; }
+      }
+      if (anyDown) {
+        setStatusLed(true, false, false); // RED
+      } else if (TelegramAlerts::isSendingMessage() || ScanManager::isActive()) {
+        setStatusLed(false, false, true); // BLUE
+      } else {
+        setStatusLed(false, true, false);  // GREEN
+      }
+
+      // Force an immediate display refresh
+      lv_refr_now(lv_disp_get_default());
+      // Mark display update time to align footer countdown
+      last_scan_time = millis();
+    }
+  );
   scanner_initialized = true;
   LOGLN("[MAIN] Scanner inicializado com sucesso!");
 
@@ -451,31 +569,23 @@ void setup() {
   // Make footer clickable
   lv_obj_add_event_cb(footer, footer_click_cb, LV_EVENT_CLICKED, nullptr);
   
-  // Enable flex layout for footer (horizontal) - left aligned
+  // Enable flex layout for footer (horizontal) - centered
   lv_obj_set_flex_flow(footer, LV_FLEX_FLOW_ROW);
-  lv_obj_set_flex_align(footer, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-
-  // WiFi status indicator (now scan status indicator)
-  wifi_indicator_ref = lv_obj_create(footer);
-  lv_obj_set_size(wifi_indicator_ref, 10, 10); // Smaller indicator
-  lv_obj_set_style_bg_color(wifi_indicator_ref, lv_color_hex(0xFF00FF), LV_PART_MAIN); // Green when free - cor inversa para display invertido
-  lv_obj_set_style_radius(wifi_indicator_ref, 5, LV_PART_MAIN);
-  lv_obj_set_style_border_width(wifi_indicator_ref, 0, LV_PART_MAIN);
-  lv_obj_set_style_pad_right(wifi_indicator_ref, 6, LV_PART_MAIN); // Space between indicator and text
+  lv_obj_set_flex_align(footer, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
   // Main footer text (single line with abbreviated info)
   lv_obj_t* footer_main_text = lv_label_create(footer);
   lv_label_set_text(footer_main_text, "Sys: OK | Alt: 0 | 6/6 UP");
   lv_obj_set_style_text_color(footer_main_text, lv_color_hex(0xCCCCCC), LV_PART_MAIN);
   lv_obj_set_style_text_font(footer_main_text, LV_FONT_DEFAULT, LV_PART_MAIN);
-  lv_obj_set_style_text_align(footer_main_text, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN);
+  lv_obj_set_width(footer_main_text, LV_PCT(100));
+  lv_obj_set_style_text_align(footer_main_text, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
   
   // Store references for dynamic updates
   uptime_label_ref = footer_main_text;
   footer_ref = footer;
 
-  // Initialize scan status indicator
-  updateScanStatusIndicator();
+  
   
   // Start scanning after everything is initialized
   ScanManager::startScanning();
@@ -502,11 +612,17 @@ void loop() {
     }
   }
 
+  // Real-time LED priority while in loop: DOWN -> RED, else TELEGRAM/SCAN -> BLUE, else GREEN
+  bool anyDownRealtime = false;
+  for (int i = 0; i < N_TARGETS; i++) {
+    if (ScanManager::getTargetStatus(i) == DOWN) { anyDownRealtime = true; break; }
+  }
+  if (anyDownRealtime) setStatusLed(true, false, false);
+  else if (TelegramAlerts::isSendingMessage() || ScanManager::isActive()) setStatusLed(false, false, true);
+  else setStatusLed(false, true, false);
+
   // Handle network scanning
   if (scanner_initialized) {
-    // Update scan status indicator FIRST - before any blocking operations
-    updateScanStatusIndicator();
-    
     // Update scanner state machine
     ScanManager::update();
     

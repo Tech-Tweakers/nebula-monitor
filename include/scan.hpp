@@ -9,6 +9,9 @@ private:
   static uint32_t lastScanTime;
   static uint32_t scanInterval;
   static bool isScanning;
+  // Callbacks
+  static void (*onScanStart)();
+  static void (*onScanComplete)();
   
 public:
   static bool begin(const Target* targetArray, int count);
@@ -20,6 +23,7 @@ public:
   static bool isActive() { return isScanning; }
   static int getCurrentTarget() { return currentTarget; }
   static int getTotalTargets() { return targetCount; }
+  static void setCallbacks(void (*onStart)(), void (*onComplete)()) { onScanStart = onStart; onScanComplete = onComplete; }
   
   // Funções para ler resultados
   static Status getTargetStatus(int index);

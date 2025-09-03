@@ -62,6 +62,17 @@ public:
   static unsigned long getTouchFilterMs();
   static unsigned long getHttpTimeoutMs();
   
+  // LED (RGB Status)
+  static int getLedPinR();
+  static int getLedPinG();
+  static int getLedPinB();
+  static bool isLedActiveHigh();
+  static int getLedPwmFreq();
+  static int getLedPwmResBits();
+  static int getLedBrightR();
+  static int getLedBrightG();
+  static int getLedBrightB();
+  
   // Debug
   static void printAllConfigs();
 };

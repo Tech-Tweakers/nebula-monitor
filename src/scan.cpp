@@ -10,6 +10,8 @@ int ScanManager::currentTarget = 0;
 uint32_t ScanManager::lastScanTime = 0;
 uint32_t ScanManager::scanInterval = 30000; // 60 segundos padrão
 bool ScanManager::isScanning = false;
+void (*ScanManager::onScanStart)() = nullptr;
+void (*ScanManager::onScanComplete)() = nullptr;
 
 // Estrutura local para armazenar resultados
 struct ScanResult {
@@ -52,6 +54,7 @@ void ScanManager::startScanning() {
   currentTarget = 0;
   lastScanTime = millis();
   Serial.println("[SCAN] Scanning iniciado");
+  if (onScanStart) onScanStart();
 }
 
 void ScanManager::stopScanning() {
@@ -73,6 +76,7 @@ void ScanManager::update() {
   if (now - lastScanTime >= scanInterval) {
     Serial.println("[SCAN] Iniciando novo ciclo de scan...");
     isScanning = true; // Mark scan as active
+    if (onScanStart) onScanStart();
     
     // Fazer scan real para todos os targets
     for (int i = 0; i < targetCount; i++) {
@@ -127,6 +131,7 @@ void ScanManager::update() {
     Serial.println("[SCAN] Ciclo de scan completo");
     lastScanTime = now;
     isScanning = false; // Mark scan as complete
+    if (onScanComplete) onScanComplete();
   }
 }
 
