@@ -280,55 +280,7 @@ pio device monitor
 
 All configuration is now managed through the `data/config.env` file, which is uploaded to the ESP32's SPIFFS filesystem. This allows for runtime configuration changes without recompiling the firmware.
 
-#### Configuration File Structure
-```env
-# WiFi Settings
-WIFI_SSID=YourNetworkName
-WIFI_PASS=YourPassword
-
-# Telegram Bot Configuration
-TELEGRAM_BOT_TOKEN=your_bot_token_here
-TELEGRAM_CHAT_ID=your_chat_id_here
-TELEGRAM_ENABLED=true
-
-# Alert Configuration
-MAX_FAILURES_BEFORE_ALERT=3
-ALERT_COOLDOWN_MS=300000
-ALERT_RECOVERY_COOLDOWN_MS=60000
-
-# Debug Settings (Runtime Configurable)
-DEBUG_LOGS_ENABLED=false
-TOUCH_LOGS_ENABLED=false
-ALL_LOGS_ENABLED=false
-
-# Display Settings
-DISPLAY_ROTATION=0
-BACKLIGHT_PIN=27
-
-# Touch Settings
-TOUCH_SCK_PIN=14
-TOUCH_MOSI_PIN=13
-TOUCH_MISO_PIN=12
-TOUCH_CS_PIN=33
-TOUCH_IRQ_PIN=36
-TOUCH_X_MIN=200
-TOUCH_X_MAX=3700
-TOUCH_Y_MIN=240
-TOUCH_Y_MAX=3800
-
-# Scan Settings
-SCAN_INTERVAL_MS=30000
-TOUCH_FILTER_MS=500
-HTTP_TIMEOUT_MS=5000
-
-# Network Targets (Format: NAME|URL|HEALTH_ENDPOINT|MONITOR_TYPE)
-TARGET_1=Proxmox HV|http://192.168.1.128:8006/||PING
-TARGET_2=Router #1|http://192.168.1.1||PING
-TARGET_3=Router #2|https://192.168.1.172||PING
-TARGET_4=Polaris API|https://api.example.com|/health|HEALTH_CHECK
-TARGET_5=Polaris INT|http://integration.example.com|/health|HEALTH_CHECK
-TARGET_6=Polaris WEB|https://web.example.com|/#/health|HEALTH_CHECK
-```
+<!-- Configuration File Structure duplicated with Quick Start; keeping only Quick Start example -->
 
 #### Target Configuration Format
 ```
