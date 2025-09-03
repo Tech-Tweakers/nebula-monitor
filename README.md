@@ -340,7 +340,6 @@ TARGET_N=NAME|URL|HEALTH_ENDPOINT|MONITOR_TYPE
 - **MONITOR_TYPE**: `PING` or `HEALTH_CHECK`
 
 ### 🎨 Display Settings
-
 #### TFT Configuration
 ```cpp
 // In platformio.ini
@@ -362,12 +361,12 @@ static constexpr int RAW_Y_MAX = 3800;
 ```
 
 ### 🔧 Performance Settings
-
 #### Debug Logging
-```cpp
-// In include/config.hpp
-#define DEBUG_LOGS_ENABLED false      // General debug logs
-#define TOUCH_LOGS_ENABLED false      // Touch-specific logs
+```env
+# In data/config.env
+DEBUG_LOGS_ENABLED=false      # General debug logs
+TOUCH_LOGS_ENABLED=false      # Touch-specific logs
+ALL_LOGS_ENABLED=false        # Master switch
 ```
 
 #### Scan Configuration
@@ -379,18 +378,18 @@ static const unsigned long SCAN_INTERVAL = 30000; // 30 seconds between scans
 ## 🎨 Color System
 
 ### 🔄 Color Inversion
-This project uses a **color-inverted display** (ST7789 with `TFT_INVERSION_ON=1`). All colors are automatically inverted by the hardware.
+This project uses a color-inverted ST7789 display (`TFT_INVERSION_ON=1`). Colors in code are inverted by hardware.
 
 ### 🎯 Working Color Palette
 
 | Desired Color | Code to Use | Result |
-|---------------|-------------|---------|
-| 🔴 **RED** | `0x00FFFF` | Status DOWN |
-| 🟢 **GREEN** | `0xFF00FF` | Status UP (Good) |
-| 🔵 **BLUE** | `0xFFFF00` | Status UP (Slow) |
-| ⚪ **WHITE** | `0x000000` | Background |
-| 🔘 **DARK GRAY** | `0x2d2d2d` | Title Bar |
-| 🔘 **LIGHT GRAY** | `0x111111` | List Items |
+|---------------|-------------|--------|
+| 🔴 RED        | `0x00FFFF`  | Down/alert |
+| 🟢 GREEN      | `0xFF00FF`  | OK/UP |
+| 🔵 BLUE       | `0xFFFF00`  | Slow/scan hint |
+| ⚪ WHITE      | `0x000000`  | Background |
+| 🔘 DARK GRAY  | `0x2d2d2d`  | Title Bar |
+| 🔘 LIGHT GRAY | `0x111111`  | List Items |
 
 ## 📱 User Interface
 
@@ -427,13 +426,10 @@ This project uses a **color-inverted display** (ST7789 with `TFT_INVERSION_ON=1`
 - **Touch**: Visual feedback with random color flash
 - **Colors**: 
   - 🟢 Green: Target UP with good latency (<500ms)
-  - 🔵 Blue: Target UP with high latency (≥500ms)
+  - 🟠 Orange: Target UP with high latency (≥500ms)
   - 🔴 Red: Target DOWN
 
-#### Visual Scan Indicator
-- **🟢 Green Bolinha**: System free, touch responsive
-- **🔴 Red Bolinha**: Scan active, touch may be slow
-- **🟡 Yellow Bolinha**: Active alerts present, attention needed
+<!-- Visual Scan Indicator (bolinha) removed in favor of hardware LED status -->
 
 ### 📊 Status Indicators
 
