@@ -221,7 +221,7 @@ String TelegramAlerts::formatAlertMessage(const char* targetName, Status status,
     message += "🕐 " + formatTime(millis() / 1000) + " de downtime\n";
   }
   
-  message += "\n🌌 _Nebula Monitor v2.2_";
+  message += "\n🌌 _Nebula Monitor v2.3_";
   
   return message;
 }
@@ -345,7 +345,7 @@ void updateTelegramAlert(int targetIndex, Status status, uint16_t latency) {
 
 void sendTestTelegramAlert() {
   if (TelegramAlerts::isActive()) {
-    String message = "🚀 *Nebula Monitor v2.2*\n\n";
+    String message = "🚀 *Nebula Monitor v2.3*\n\n";
     message += "📊 *Monitorando:* " + String(6) + " targets\n";
     message += "🔔 *Threshold:* " + String(MAX_FAILURES_BEFORE_ALERT) + " falhas\n";
     message += "⏰ *Cooldown:* " + String(ALERT_COOLDOWN_MS / 1000) + "s\n\n";

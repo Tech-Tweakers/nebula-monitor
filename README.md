@@ -89,7 +89,7 @@
 - **Color-coded Status**: Intuitive color system for quick status recognition
 - **Dynamic Updates**: Real-time UI updates without flickering
 - **Smart Footer**: 5 modes of system information (System, Network, Performance, Targets, Uptime)
-- **Visual Scan Indicator**: Green/red bolinha shows scan status and touch responsiveness
+<!-- Removed Visual Scan Indicator pending redesign -->
 - **Compact Display**: Abbreviated text for maximum information density
 
 ### 🔧 Advanced System Features
