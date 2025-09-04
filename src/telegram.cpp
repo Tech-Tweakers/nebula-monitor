@@ -97,9 +97,20 @@ void TelegramAlerts::updateTargetStatus(int targetIndex, Status newStatus, uint1
     } else if (newStatus == UP && state.last_status == DOWN) {
       // Recuperação: status mudou de DOWN para UP
       Serial.printf("[TELEGRAM] Recuperação detectada para target %d\n", targetIndex);
-      if (state.alert_sent && isTimeForAlert(targetIndex, true)) {
+      bool hadOutage = state.downtime_start > 0;
+      bool canRecover = isTimeForAlert(targetIndex, true);
+      Serial.printf("[TELEGRAM] Recovery check: alert_sent=%s, hadOutage=%s, canRecover=%s, last_alert=%lu, downtime_start=%lu\n",
+                    state.alert_sent ? "true" : "false",
+                    hadOutage ? "true" : "false",
+                    canRecover ? "true" : "false",
+                    state.last_alert,
+                    state.downtime_start);
+      // Enviar recuperação se houve downtime (mesmo sem alerta prévio) ou se alerta prévio foi enviado
+      if ((state.alert_sent || hadOutage) && canRecover) {
         sendRecoveryAlert(targetIndex, "Target", latency);
         state.last_alert = now;
+      } else {
+        Serial.println("[TELEGRAM] Recovery NÃO enviado (aguardando cooldown ou sem downtime registrado)");
       }
       state.failure_count = 0;
       state.alert_sent = false;
