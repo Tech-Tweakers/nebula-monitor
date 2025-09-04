@@ -8,6 +8,11 @@
 #include "telegram.hpp"
 #include <lvgl.h>
 
+// FreeRTOS (ESP32) for multi-core tasks
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/queue.h"
+
 // Network targets - serão carregados dinamicamente do config.env
 static Target targets[10]; // Array dinâmico para targets
 static int N_TARGETS = 0;  // Número de targets carregados
@@ -218,6 +223,23 @@ void showDetailWindow(int target_index) {
 
 // (Removed) scan status indicator
 
+// ------------------------
+// Inter-task communication
+// ------------------------
+enum ScanEventType { EV_SCAN_START, EV_SCAN_COMPLETE, EV_TARGET_UPDATE };
+struct ScanEvent {
+  ScanEventType type;
+  int index;           // used for EV_TARGET_UPDATE
+  Status status;       // used for EV_TARGET_UPDATE
+  uint16_t latency_ms; // used for EV_TARGET_UPDATE
+};
+
+static QueueHandle_t scan_event_queue = nullptr; // events produced by scanner task and consumed by display task
+
+// Task handles (optional)
+static TaskHandle_t display_task_handle = nullptr;
+static TaskHandle_t scanner_task_handle = nullptr;
+
 // Function to update footer with all modes (single line, abbreviated)
 void updateFooterContent() {
   if (!uptime_label_ref) return;
@@ -328,6 +350,239 @@ void footer_click_cb(lv_event_t* e) {
   TOUCH_LOGLN("[FOOTER] Display forçado a atualizar!");
 }
 
+// ------------------------
+// Display/UI Task (Core 1)
+// ------------------------
+static void displayTask(void* pv) {
+  for (;;) {
+    // Drain scan events and update UI accordingly (LVGL must be accessed only here)
+    if (scan_event_queue) {
+      ScanEvent ev;
+      while (xQueueReceive(scan_event_queue, &ev, 0) == pdTRUE) {
+        if (ev.type == EV_SCAN_START) {
+          setStatusLed(false, false, true); // BLUE while scanning
+          updateFooterContent();
+          lv_refr_now(lv_disp_get_default());
+        } else if (ev.type == EV_SCAN_COMPLETE) {
+          // After scan complete, recompute UI + LED coherently
+          bool anyDown = false;
+          for (int i = 0; i < N_TARGETS; i++) {
+            Status s = ScanManager::getTargetStatus(i);
+            if (s == DOWN) { anyDown = true; }
+            uint16_t latency = ScanManager::getTargetLatency(i);
+            if (s == UP && latency > 0) {
+              char latency_text[30];
+              const char* type_text = targets[i].monitor_type == HEALTH_CHECK ? "OK" : "ms";
+              snprintf(latency_text, sizeof(latency_text), "%d %s", latency, type_text);
+              lv_label_set_text(latency_labels[i], latency_text);
+              if (latency < 500) {
+                lv_obj_set_style_bg_color(status_labels[i], lv_color_hex(0xFF00FF), LV_PART_MAIN);
+                lv_obj_set_style_text_color(latency_labels[i], lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+                lv_obj_set_style_text_color(name_labels[i], lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+              } else {
+                lv_obj_set_style_bg_color(status_labels[i], lv_color_hex(0x0086ff), LV_PART_MAIN);
+                lv_obj_set_style_text_color(latency_labels[i], lv_color_hex(0x000000), LV_PART_MAIN);
+                lv_obj_set_style_text_color(name_labels[i], lv_color_hex(0x000000), LV_PART_MAIN);
+              }
+            } else {
+              const char* down_text = targets[i].monitor_type == HEALTH_CHECK ? "HEALTH FAIL" : "DOWN";
+              lv_label_set_text(latency_labels[i], down_text);
+              lv_obj_set_style_bg_color(status_labels[i], lv_color_hex(0x00FFFF), LV_PART_MAIN);
+              lv_obj_set_style_text_color(latency_labels[i], lv_color_hex(0x000000), LV_PART_MAIN);
+              lv_obj_set_style_text_color(name_labels[i], lv_color_hex(0x000000), LV_PART_MAIN);
+            }
+            lv_obj_invalidate(status_labels[i]);
+          }
+          updateFooterContent();
+          if (anyDown) setStatusLed(true, false, false); // RED
+          else if (TelegramAlerts::isSendingMessage() || ScanManager::isActive()) setStatusLed(false, false, true); // BLUE
+          else setStatusLed(false, true, false); // GREEN
+          lv_refr_now(lv_disp_get_default());
+          last_scan_time = millis();
+        } else if (ev.type == EV_TARGET_UPDATE) {
+          int idx = ev.index;
+          if (idx >= 0 && idx < N_TARGETS) {
+            updateTelegramAlert(idx, ev.status, ev.latency_ms);
+            if (ev.status == UP && ev.latency_ms > 0) {
+              char latency_text[30];
+              const char* type_text = targets[idx].monitor_type == HEALTH_CHECK ? "OK" : "ms";
+              snprintf(latency_text, sizeof(latency_text), "%d %s", ev.latency_ms, type_text);
+              lv_label_set_text(latency_labels[idx], latency_text);
+              if (ev.latency_ms < 500) {
+                lv_obj_set_style_bg_color(status_labels[idx], lv_color_hex(0xFF00FF), LV_PART_MAIN);
+                lv_obj_set_style_text_color(latency_labels[idx], lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+                lv_obj_set_style_text_color(name_labels[idx], lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+              } else {
+                lv_obj_set_style_bg_color(status_labels[idx], lv_color_hex(0x0086ff), LV_PART_MAIN);
+                lv_obj_set_style_text_color(latency_labels[idx], lv_color_hex(0x000000), LV_PART_MAIN);
+                lv_obj_set_style_text_color(name_labels[idx], lv_color_hex(0x000000), LV_PART_MAIN);
+              }
+            } else {
+              const char* down_text = targets[idx].monitor_type == HEALTH_CHECK ? "HEALTH FAIL" : "DOWN";
+              lv_label_set_text(latency_labels[idx], down_text);
+              lv_obj_set_style_bg_color(status_labels[idx], lv_color_hex(0x00FFFF), LV_PART_MAIN);
+              lv_obj_set_style_text_color(latency_labels[idx], lv_color_hex(0x000000), LV_PART_MAIN);
+              lv_obj_set_style_text_color(name_labels[idx], lv_color_hex(0x000000), LV_PART_MAIN);
+            }
+            lv_obj_invalidate(status_labels[idx]);
+
+            bool anyDown = false;
+            for (int i = 0; i < N_TARGETS; i++) {
+              if (ScanManager::getTargetStatus(i) == DOWN) { anyDown = true; break; }
+            }
+            if (anyDown) setStatusLed(true, false, false);
+            else if (TelegramAlerts::isSendingMessage() || ScanManager::isActive()) setStatusLed(false, false, true);
+            else setStatusLed(false, true, false);
+
+            lv_refr_now(lv_disp_get_default());
+          }
+        }
+      }
+    }
+
+    // Handle LVGL tasks
+    lv_timer_handler();
+
+    // Small delay to give touch more processing time
+    vTaskDelay(pdMS_TO_TICKS(10));
+
+    // Real-time LED priority while in loop: DOWN -> RED, else TELEGRAM/SCAN -> BLUE, else GREEN
+    bool anyDownRealtime = false;
+    for (int i = 0; i < N_TARGETS; i++) {
+      if (ScanManager::getTargetStatus(i) == DOWN) { anyDownRealtime = true; break; }
+    }
+    if (anyDownRealtime) setStatusLed(true, false, false);
+    else if (TelegramAlerts::isSendingMessage() || ScanManager::isActive()) setStatusLed(false, false, true);
+    else setStatusLed(false, true, false);
+
+    // Wi-Fi fail-safe: blink RED when disconnected (overrides other states)
+    if (WiFi.status() != WL_CONNECTED) {
+      static unsigned long lastBlink = 0;
+      static bool on = false;
+      if (millis() - lastBlink >= 500) {
+        on = !on;
+        lastBlink = millis();
+        setStatusLed(on, false, false);
+      }
+    }
+
+    // Periodic footer updates
+    if (millis() - last_uptime_update >= UPTIME_UPDATE_INTERVAL) {
+      updateFooterContent();
+      last_uptime_update = millis();
+    }
+
+    // Handle touch input with global filter
+    if (Touch::touched()) {
+      unsigned long current_time = millis();
+      if (current_time - last_touch_time < TOUCH_FILTER_MS) {
+        continue;
+      }
+      last_touch_time = current_time;
+
+      int16_t raw_x, raw_y, z;
+      Touch::readRaw(raw_x, raw_y, z);
+
+      int screen_x, screen_y;
+      Touch::mapRawToScreen(raw_x, raw_y, screen_x, screen_y);
+
+      TOUCH_LOGF("[TOUCH] Touch detectado em (%d, %d) - Filtro aplicado\n", screen_x, screen_y);
+
+      // If a detail window is open, close it on ANY tap. If tapped inside the
+      // window, consume the event (do not open another). If tapped outside,
+      // close it and continue processing (may open another window).
+      if (detail_window_open && detail_window) {
+        lv_area_t window_area;
+        lv_obj_get_coords(detail_window, &window_area);
+        bool inside = (screen_x >= window_area.x1 && screen_x < window_area.x2 &&
+                       screen_y >= window_area.y1 && screen_y < window_area.y2);
+        closeDetailWindow();
+        if (inside) {
+          TOUCH_LOGLN("[TOUCH] Janela de detalhes fechada por toque interno");
+          continue;
+        } else {
+          TOUCH_LOGLN("[TOUCH] Janela de detalhes fechada por toque externo");
+        }
+      }
+
+      if (footer_ref) {
+        lv_area_t footer_area;
+        lv_obj_get_coords(footer_ref, &footer_area);
+
+        TOUCH_LOGF("[TOUCH] Footer area: (%d,%d) to (%d,%d)\n",
+                    footer_area.x1, footer_area.y1, footer_area.x2, footer_area.y2);
+
+        if (screen_x >= footer_area.x1 && screen_x < footer_area.x2 &&
+            screen_y >= footer_area.y1 && screen_y < footer_area.y2) {
+          if (!footer_pressed) {
+            footer_pressed = true;
+            footer_press_start = millis();
+            TOUCH_LOGLN("[TOUCH] FOOTER PRESSIONADO! Iniciando contagem de 2s...");
+          }
+
+          if (footer_pressed && (millis() - footer_press_start >= FOOTER_LONG_PRESS_TIME)) {
+            TOUCH_LOGLN("[TOUCH] PRESSÃO LONGA ATINGIDA! Executando toggle...");
+            footer_click_cb(nullptr);
+            footer_pressed = false;
+            footer_press_start = 0;
+            TOUCH_LOGLN("[TOUCH] Toggle executado e footer restaurado!");
+            continue;
+          }
+        } else {
+          if (footer_pressed) {
+            footer_pressed = false;
+            footer_press_start = 0;
+            TOUCH_LOGLN("[TOUCH] Touch fora do footer - resetando pressão!");
+            lv_obj_set_style_bg_color(footer_ref, lv_color_hex(0x333333), LV_PART_MAIN);
+            lv_refr_now(lv_disp_get_default());
+          }
+        }
+      }
+
+      // (detail window already handled above)
+
+      for (int i = 0; i < N_TARGETS; i++) {
+        lv_area_t area;
+        lv_obj_get_coords(status_labels[i], &area);
+        if (screen_x >= area.x1 && screen_x < area.x2 &&
+            screen_y >= area.y1 && screen_y < area.y2) {
+          TOUCH_LOGF("[TOUCH] Status item %d (%s) tocado\n",
+                      i, targets[i].name);
+          showDetailWindow(i);
+          break;
+        }
+      }
+    }
+  }
+}
+
+// ------------------------
+// Scanner Task (Core 0)
+// ------------------------
+static void scannerTask(void* pv) {
+  for (;;) {
+    // Check WiFi connection and reconnect if needed (keep networking on core 0)
+    if (WiFi.status() != WL_CONNECTED) {
+      Serial.println("[SCAN-TASK] WiFi desconectado, tentando reconectar...");
+      if (Net::connectWiFi(WIFI_SSID, WIFI_PASS, 10000)) {
+        Serial.println("[SCAN-TASK] WiFi reconectado!");
+        Net::printInfo();
+      } else {
+        Serial.println("[SCAN-TASK] Falha na reconexão WiFi");
+      }
+    }
+
+    ScanManager::update();
+
+    // Adaptive yield: when scanning, yield briefly; when idle, relax more
+    if (ScanManager::isActive()) {
+      vTaskDelay(pdMS_TO_TICKS(2));
+    } else {
+      vTaskDelay(pdMS_TO_TICKS(20));
+    }
+  }
+}
+
 void setup() {
   Serial.begin(115200);
   LOGLN("[MAIN] Iniciando Nebula Monitor v2.3...");
@@ -410,105 +665,24 @@ void setup() {
     LOGLN("[MAIN] ERRO: Falha ao inicializar scanner!");
     return;
   }
-  // Wire scan callbacks to sync UI + LED exactly at start/end
+  // Wire scan callbacks to post events for the Display task (no direct LVGL calls here)
   ScanManager::setCallbacks(
     [](){
-      // Scan started: set LED to blue (scan state), refresh footer immediately
-      setStatusLed(false, false, true);
-      updateFooterContent();
-      lv_refr_now(lv_disp_get_default());
+      if (scan_event_queue) {
+        ScanEvent ev{EV_SCAN_START, -1, UNKNOWN, 0};
+        xQueueSend(scan_event_queue, &ev, 0);
+      }
     },
     [](){
-      // Scan completed: update UI list from latest results, footer and LED coherently
-      for (int i = 0; i < N_TARGETS; i++) {
-        Status status = ScanManager::getTargetStatus(i);
-        uint16_t latency = ScanManager::getTargetLatency(i);
-        // Update alert state per target immediately
-        updateTelegramAlert(i, status, latency);
-        if (status == UP && latency > 0) {
-          char latency_text[30];
-          const char* type_text = targets[i].monitor_type == HEALTH_CHECK ? "OK" : "ms";
-          snprintf(latency_text, sizeof(latency_text), "%d %s", latency, type_text);
-          lv_label_set_text(latency_labels[i], latency_text);
-          if (latency < 500) {
-            lv_obj_set_style_bg_color(status_labels[i], lv_color_hex(0xFF00FF), LV_PART_MAIN);
-            lv_obj_set_style_text_color(latency_labels[i], lv_color_hex(0xFFFFFF), LV_PART_MAIN);
-            lv_obj_set_style_text_color(name_labels[i], lv_color_hex(0xFFFFFF), LV_PART_MAIN);
-          } else {
-            lv_obj_set_style_bg_color(status_labels[i], lv_color_hex(0x0086ff), LV_PART_MAIN);
-            lv_obj_set_style_text_color(latency_labels[i], lv_color_hex(0x000000), LV_PART_MAIN);
-            lv_obj_set_style_text_color(name_labels[i], lv_color_hex(0x000000), LV_PART_MAIN);
-          }
-        } else {
-          const char* down_text = targets[i].monitor_type == HEALTH_CHECK ? "HEALTH FAIL" : "DOWN";
-          lv_label_set_text(latency_labels[i], down_text);
-          lv_obj_set_style_bg_color(status_labels[i], lv_color_hex(0x00FFFF), LV_PART_MAIN);
-          lv_obj_set_style_text_color(latency_labels[i], lv_color_hex(0x000000), LV_PART_MAIN);
-          lv_obj_set_style_text_color(name_labels[i], lv_color_hex(0x000000), LV_PART_MAIN);
-        }
-        lv_obj_invalidate(status_labels[i]);
+      if (scan_event_queue) {
+        ScanEvent ev{EV_SCAN_COMPLETE, -1, UNKNOWN, 0};
+        xQueueSend(scan_event_queue, &ev, 0);
       }
-      // Footer reflects latest status
-      updateFooterContent();
-
-      // LED based on alerts: any DOWN? -> RED; else if Telegram sending or scanning -> BLUE; else GREEN
-      bool anyDown = false;
-      for (int i = 0; i < N_TARGETS; i++) {
-        Status s = ScanManager::getTargetStatus(i);
-        if (s == DOWN) { anyDown = true; }
-      }
-      if (anyDown) {
-        setStatusLed(true, false, false); // RED
-      } else if (TelegramAlerts::isSendingMessage() || ScanManager::isActive()) {
-        setStatusLed(false, false, true); // BLUE
-      } else {
-        setStatusLed(false, true, false);  // GREEN
-      }
-
-      // Force an immediate display refresh
-      lv_refr_now(lv_disp_get_default());
-      // Mark display update time to align footer countdown
-      last_scan_time = millis();
     },
     [](int idx, Status status, uint16_t latency){
-      // Atualiza somente o target afetado
-      if (idx >= 0 && idx < N_TARGETS) {
-        updateTelegramAlert(idx, status, latency);
-        if (status == UP && latency > 0) {
-          char latency_text[30];
-          const char* type_text = targets[idx].monitor_type == HEALTH_CHECK ? "OK" : "ms";
-          snprintf(latency_text, sizeof(latency_text), "%d %s", latency, type_text);
-          lv_label_set_text(latency_labels[idx], latency_text);
-          if (latency < 500) {
-            lv_obj_set_style_bg_color(status_labels[idx], lv_color_hex(0xFF00FF), LV_PART_MAIN);
-            lv_obj_set_style_text_color(latency_labels[idx], lv_color_hex(0xFFFFFF), LV_PART_MAIN);
-            lv_obj_set_style_text_color(name_labels[idx], lv_color_hex(0xFFFFFF), LV_PART_MAIN);
-          } else {
-            // Laranja (cor trabalhada via paleta invertida → azul aqui): mantemos cor de "slow"
-            lv_obj_set_style_bg_color(status_labels[idx], lv_color_hex(0x0086ff), LV_PART_MAIN);
-            lv_obj_set_style_text_color(latency_labels[idx], lv_color_hex(0x000000), LV_PART_MAIN);
-            lv_obj_set_style_text_color(name_labels[idx], lv_color_hex(0x000000), LV_PART_MAIN);
-          }
-        } else {
-          const char* down_text = targets[idx].monitor_type == HEALTH_CHECK ? "HEALTH FAIL" : "DOWN";
-          lv_label_set_text(latency_labels[idx], down_text);
-          lv_obj_set_style_bg_color(status_labels[idx], lv_color_hex(0x00FFFF), LV_PART_MAIN);
-          lv_obj_set_style_text_color(latency_labels[idx], lv_color_hex(0x000000), LV_PART_MAIN);
-          lv_obj_set_style_text_color(name_labels[idx], lv_color_hex(0x000000), LV_PART_MAIN);
-        }
-        lv_obj_invalidate(status_labels[idx]);
-
-        // Atualiza LED por target: se algum DOWN até aqui, LED vermelho; se scan ativo, azul; senão verde
-        bool anyDown = false;
-        for (int i = 0; i < N_TARGETS; i++) {
-          if (ScanManager::getTargetStatus(i) == DOWN) { anyDown = true; break; }
-        }
-        if (anyDown) setStatusLed(true, false, false);
-        else if (TelegramAlerts::isSendingMessage() || ScanManager::isActive()) setStatusLed(false, false, true);
-        else setStatusLed(false, true, false);
-
-        // Refresh parcial/imediato
-        lv_refr_now(lv_disp_get_default());
+      if (scan_event_queue) {
+        ScanEvent ev{EV_TARGET_UPDATE, idx, status, latency};
+        xQueueSend(scan_event_queue, &ev, 0);
       }
     }
   );
@@ -626,242 +800,40 @@ void setup() {
   uptime_label_ref = footer_main_text;
   footer_ref = footer;
 
-  
-  
+  // Create event queue and tasks
+  scan_event_queue = xQueueCreate(20, sizeof(ScanEvent));
+
   // Start scanning after everything is initialized
   ScanManager::startScanning();
   Serial.println("[MAIN] Scanner iniciado!");
+
+  // Create tasks pinned to specific cores
+  // Display/UI task on Core 1 with higher priority
+  xTaskCreatePinnedToCore(
+    displayTask,
+    "DisplayTask",
+    6144,
+    nullptr,
+    3,
+    &display_task_handle,
+    1
+  );
+
+  // Scanner task on Core 0 with slightly lower priority
+  xTaskCreatePinnedToCore(
+    scannerTask,
+    "ScannerTask",
+    6144,
+    nullptr,
+    2,
+    &scanner_task_handle,
+    0
+  );
   
   Serial.println("[MAIN] Setup completo! Interface pronta com footer!");
 }
 
 void loop() {
-  // Handle LVGL tasks
-  lv_timer_handler();
-  
-  // Small delay to give touch more processing time
-  delay(10);
-
-  // Check WiFi connection and reconnect if needed
-  if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("[MAIN] WiFi desconectado, tentando reconectar...");
-    if (Net::connectWiFi(WIFI_SSID, WIFI_PASS, 10000)) { // 10 second timeout
-      Serial.println("[MAIN] WiFi reconectado!");
-      Net::printInfo();
-    } else {
-      Serial.println("[MAIN] Falha na reconexão WiFi");
-    }
-  }
-
-  // Real-time LED priority while in loop: DOWN -> RED, else TELEGRAM/SCAN -> BLUE, else GREEN
-  bool anyDownRealtime = false;
-  for (int i = 0; i < N_TARGETS; i++) {
-    if (ScanManager::getTargetStatus(i) == DOWN) { anyDownRealtime = true; break; }
-  }
-  if (anyDownRealtime) setStatusLed(true, false, false);
-  else if (TelegramAlerts::isSendingMessage() || ScanManager::isActive()) setStatusLed(false, false, true);
-  else setStatusLed(false, true, false);
-
-  // Wi-Fi fail-safe: blink RED when disconnected (overrides other states)
-  if (WiFi.status() != WL_CONNECTED) {
-    static unsigned long lastBlink = 0;
-    static bool on = false;
-    if (millis() - lastBlink >= 500) { // 500ms blink rate
-      on = !on;
-      lastBlink = millis();
-      setStatusLed(on, false, false);
-    }
-  }
-
-  // Handle network scanning
-  if (scanner_initialized) {
-    // Update scanner state machine
-    ScanManager::update();
-    
-
-    
-    // Check if we need to update display
-    if (millis() - last_scan_time >= SCAN_INTERVAL) {
-      DEBUG_LOGLN("[SCANNER] Atualizando display...");
-      
-      // Update all targets from scanner data
-      for (int i = 0; i < N_TARGETS; i++) {
-        // Get scan result from scanner
-        Status status = ScanManager::getTargetStatus(i);
-        uint16_t latency = ScanManager::getTargetLatency(i);
-        
-        // Debug: mostrar status e latência
-        DEBUG_LOGF("[FRONTEND] Target %d: Status=%d, Latency=%d\n", i, status, latency);
-        
-        // Atualizar sistema de alertas
-        DEBUG_LOGF("[MAIN] Chamando updateTelegramAlert para target %d (status=%d, latency=%d)\n", i, status, latency);
-        updateTelegramAlert(i, status, latency);
-        
-        if (status == UP && latency > 0) {
-          char latency_text[30];
-          const char* type_text = targets[i].monitor_type == HEALTH_CHECK ? "OK" : "ms";
-          snprintf(latency_text, sizeof(latency_text), "%d %s", latency, type_text);
-          lv_label_set_text(latency_labels[i], latency_text);
-          
-          // Determine color based on latency threshold
-          if (latency < 500) {
-            // Green for good latency (< 500ms)
-            lv_obj_set_style_bg_color(status_labels[i], lv_color_hex(0xFF00FF), LV_PART_MAIN); // Verde (inverso)
-            lv_obj_set_style_text_color(latency_labels[i], lv_color_hex(0xFFFFFF), LV_PART_MAIN); // Texto branco
-            lv_obj_set_style_text_color(name_labels[i], lv_color_hex(0xFFFFFF), LV_PART_MAIN); // Nome branco
-            Serial.printf("[SCANNER] %s: %d %s (UP - Verde)\n", targets[i].name, latency, type_text);
-          } else {
-            // Blue for high latency (>= 500ms)
-            lv_obj_set_style_bg_color(status_labels[i], lv_color_hex(0x0086ff), LV_PART_MAIN); // Azul (cor diferente para não confundir)
-            lv_obj_set_style_text_color(latency_labels[i], lv_color_hex(0x000000), LV_PART_MAIN); // Texto preto
-            lv_obj_set_style_text_color(name_labels[i], lv_color_hex(0x000000), LV_PART_MAIN); // Nome preto
-            Serial.printf("[SCANNER] %s: %d %s (UP - Azul)\n", targets[i].name, latency, type_text);
-          }
-        } else {
-          const char* down_text = targets[i].monitor_type == HEALTH_CHECK ? "HEALTH FAIL" : "DOWN";
-          lv_label_set_text(latency_labels[i], down_text);
-          
-          // Update status color (red for failure) - usando cor inversa para display invertido
-          lv_obj_set_style_bg_color(status_labels[i], lv_color_hex(0x00FFFF), LV_PART_MAIN);
-          
-          // Texto preto para fundo vermelho (melhor legibilidade) - usando cor inversa para display invertido
-          lv_obj_set_style_text_color(latency_labels[i], lv_color_hex(0x000000), LV_PART_MAIN);
-          lv_obj_set_style_text_color(name_labels[i], lv_color_hex(0x000000), LV_PART_MAIN);
-          
-          Serial.printf("[SCANNER] %s: %s\n", targets[i].name, down_text);
-        }
-        
-        // Force refresh of the item
-        lv_obj_invalidate(status_labels[i]);
-      }
-      
-      // Force display refresh
-      lv_refr_now(lv_disp_get_default());
-      
-      last_scan_time = millis();
-      Serial.println("[SCANNER] Display atualizado!");
-    }
-    
-    // Update footer based on current mode - only when footer is visible
-    if (millis() - last_uptime_update >= UPTIME_UPDATE_INTERVAL) {
-      // Only update footer content, don't do heavy calculations
-      updateFooterContent();
-      last_uptime_update = millis();
-    }
-  }
-
-
-  
-  // Verificar status do Telegram periodicamente (debug)
-  static unsigned long last_telegram_check = 0;
-  if (millis() - last_telegram_check >= 240000) { // A cada 10 segundos
-    Serial.printf("[MAIN] Status Telegram: %s\n", telegram_initialized ? "ATIVO" : "INATIVO");
-    last_telegram_check = millis();
-  }
-
-  // Handle touch input with global filter
-  if (Touch::touched()) {
-    // Apply global touch filter (500ms)
-    unsigned long current_time = millis();
-    if (current_time - last_touch_time < TOUCH_FILTER_MS) {
-      return; // Ignore touch if within filter period
-    }
-    last_touch_time = current_time;
-    
-    int16_t raw_x, raw_y, z;
-    Touch::readRaw(raw_x, raw_y, z);
-    
-    int screen_x, screen_y;
-    Touch::mapRawToScreen(raw_x, raw_y, screen_x, screen_y);
-    
-    TOUCH_LOGF("[TOUCH] Touch detectado em (%d, %d) - Filtro aplicado\n", screen_x, screen_y);
-    
-    // Check if footer was touched
-    if (footer_ref) {
-      lv_area_t footer_area;
-      lv_obj_get_coords(footer_ref, &footer_area);
-      
-      TOUCH_LOGF("[TOUCH] Footer area: (%d,%d) to (%d,%d)\n", 
-                   footer_area.x1, footer_area.y1, footer_area.x2, footer_area.y2);
-      
-      if (screen_x >= footer_area.x1 && screen_x < footer_area.x2 && 
-          screen_y >= footer_area.y1 && screen_y < footer_area.y2) {
-        
-        // Footer touched - start long press detection
-        if (!footer_pressed) {
-          footer_pressed = true;
-          footer_press_start = millis();
-          TOUCH_LOGLN("[TOUCH] FOOTER PRESSIONADO! Iniciando contagem de 2s...");
-          
-          // // Visual feedback - change footer color to indicate press
-          // lv_obj_set_style_bg_color(footer_ref, lv_color_hex(0x555555), LV_PART_MAIN);
-          // lv_refr_now(lv_disp_get_default());
-        }
-        
-        // Check if long press time reached
-        if (footer_pressed && (millis() - footer_press_start >= FOOTER_LONG_PRESS_TIME)) {
-          TOUCH_LOGLN("[TOUCH] PRESSÃO LONGA ATINGIDA! Executando toggle...");
-          
-          // Execute toggle
-          footer_click_cb(nullptr);
-          
-          // Reset press state
-          footer_pressed = false;
-          footer_press_start = 0;
-          
-          // // Restore original footer color
-          // lv_obj_set_style_bg_color(footer_ref, lv_color_hex(0x333333), LV_PART_MAIN);
-          // lv_refr_now(lv_disp_get_default());
-          
-          TOUCH_LOGLN("[TOUCH] Toggle executado e footer restaurado!");
-          return; // Exit early since footer was toggled
-        }
-      } else {
-        // Touch outside footer - reset press state
-        if (footer_pressed) {
-          footer_pressed = false;
-          footer_press_start = 0;
-          TOUCH_LOGLN("[TOUCH] Touch fora do footer - resetando pressão!");
-          
-          // Restore original footer color
-          lv_obj_set_style_bg_color(footer_ref, lv_color_hex(0x333333), LV_PART_MAIN);
-          lv_refr_now(lv_disp_get_default());
-        }
-      }
-    }
-    
-    // Check if detail window is open and was touched
-    if (detail_window_open && detail_window) {
-      lv_area_t window_area;
-      lv_obj_get_coords(detail_window, &window_area);
-      
-      if (screen_x >= window_area.x1 && screen_x < window_area.x2 && 
-          screen_y >= window_area.y1 && screen_y < window_area.y2) {
-        // Detail window was touched - close it
-        closeDetailWindow();
-        TOUCH_LOGLN("[TOUCH] Janela de detalhes fechada por toque");
-        return; // Exit early since window was closed
-      }
-    }
-    
-    // Check which status item was touched
-    for (int i = 0; i < N_TARGETS; i++) {
-      lv_area_t area;
-      lv_obj_get_coords(status_labels[i], &area);
-      
-      if (screen_x >= area.x1 && screen_x < area.x2 && 
-          screen_y >= area.y1 && screen_y < area.y2) {
-        
-        TOUCH_LOGF("[TOUCH] Status item %d (%s) tocado\n", 
-                     i, targets[i].name);
-        
-        // Show detail window
-        showDetailWindow(i);
-        break;
-      }
-    }
-  }
-
-  // Small delay for stability
-  delay(10);
+  // All work is done in FreeRTOS tasks now
+  delay(1000);
 }
