@@ -42,6 +42,7 @@ bool TelegramAlerts::begin() {
     alertStates[i].last_alert = 0;
     alertStates[i].alert_sent = false;
     alertStates[i].downtime_start = 0;
+    alertStates[i].alert_downtime_start = 0;
   }
   
   Serial.println("[TELEGRAM] Sistema de alertas inicializado com sucesso!");
@@ -87,6 +88,11 @@ void TelegramAlerts::updateTargetStatus(int targetIndex, Status newStatus, uint1
       // Enviar alerta se atingiu o limite
       if (state.failure_count >= MAX_FAILURES_BEFORE_ALERT && isTimeForAlert(targetIndex)) {
         Serial.printf("[TELEGRAM] Enviando alerta para target %d (falhas: %d)\n", targetIndex, state.failure_count);
+        // Marcar início do downtime de alerta ANTES de enviar a mensagem (para o DOWN incluir duração)
+        if (state.alert_downtime_start == 0) {
+          state.alert_downtime_start = state.downtime_start > 0 ? state.downtime_start : now;
+          Serial.printf("[TELEGRAM] Target %d: alert_downtime_start=%lu (pre-ALERT)\n", targetIndex, state.alert_downtime_start);
+        }
         sendAlert(targetIndex, "Target", newStatus, latency);
         state.last_alert = now;
         state.alert_sent = true;
@@ -105,16 +111,31 @@ void TelegramAlerts::updateTargetStatus(int targetIndex, Status newStatus, uint1
                     canRecover ? "true" : "false",
                     state.last_alert,
                     state.downtime_start);
-      // Enviar recuperação se houve downtime (mesmo sem alerta prévio) ou se alerta prévio foi enviado
-      if ((state.alert_sent || hadOutage) && canRecover) {
+      // Enviar recuperação SOMENTE se houve alerta DOWN prévio (usa alert_downtime_start)
+      if (state.alert_sent && state.alert_downtime_start > 0 && canRecover) {
         sendRecoveryAlert(targetIndex, "Target", latency);
         state.last_alert = now;
+        // Reset somente após enviar recovery
+        state.failure_count = 0;
+        state.alert_sent = false;
+        state.downtime_start = 0;  // Reset downtime tracking
+        state.alert_downtime_start = 0; // Reset downtime tracking do alerta
       } else {
         Serial.println("[TELEGRAM] Recovery NÃO enviado (aguardando cooldown ou sem downtime registrado)");
       }
+    }
+    // Atualizar last_status após tratar a mudança
+    state.last_status = newStatus;
+  // Se status permaneceu UP, verificar se há recovery pendente (por cooldown) e tentar enviar
+  } else if (newStatus == UP) {
+    if (state.alert_sent && state.alert_downtime_start > 0 && isTimeForAlert(targetIndex, true)) {
+      Serial.printf("[TELEGRAM] Recovery pendente: enviando agora (target %d)\n", targetIndex);
+      sendRecoveryAlert(targetIndex, "Target", latency);
+      state.last_alert = now;
       state.failure_count = 0;
       state.alert_sent = false;
-      state.downtime_start = 0;  // Reset downtime tracking
+      state.downtime_start = 0;
+      state.alert_downtime_start = 0;
     }
     
     state.last_status = newStatus;
@@ -128,6 +149,11 @@ void TelegramAlerts::updateTargetStatus(int targetIndex, Status newStatus, uint1
                state.failure_count, MAX_FAILURES_BEFORE_ALERT, isTimeForAlert(targetIndex) ? "true" : "false");
   
   if (state.failure_count >= MAX_FAILURES_BEFORE_ALERT && isTimeForAlert(targetIndex)) {
+    // Garantir início do downtime de alerta também no caminho contínuo
+    if (state.alert_downtime_start == 0) {
+      state.alert_downtime_start = state.downtime_start > 0 ? state.downtime_start : now;
+      Serial.printf("[TELEGRAM] Target %d: alert_downtime_start=%lu (contínuo)\n", targetIndex, state.alert_downtime_start);
+    }
     Serial.printf("[TELEGRAM] Enviando alerta para target %d (falhas contínuas: %d)\n", targetIndex, state.failure_count);
     sendAlert(targetIndex, "Target", newStatus, latency);
     state.last_alert = now;
@@ -153,10 +179,10 @@ void TelegramAlerts::sendAlert(int targetIndex, const char* targetName, Status s
     realTargetName = targetNames[targetIndex];
   }
   
-  // Calcular downtime atual (em segundos) se já marcado início
+  // Calcular downtime atual (em segundos) baseado em alert_downtime_start se disponível
   unsigned long currentDowntime = 0;
-  if (targetIndex >= 0 && targetIndex < 6 && alertStates[targetIndex].downtime_start > 0) {
-    currentDowntime = (millis() - alertStates[targetIndex].downtime_start) / 1000;
+  if (targetIndex >= 0 && targetIndex < 6 && alertStates[targetIndex].alert_downtime_start > 0) {
+    currentDowntime = (millis() - alertStates[targetIndex].alert_downtime_start) / 1000;
   }
 
   String message = formatAlertMessage(realTargetName, status, latency, false, currentDowntime);
@@ -183,10 +209,10 @@ void TelegramAlerts::sendRecoveryAlert(int targetIndex, const char* targetName, 
     realTargetName = targetNames[targetIndex];
   }
   
-  // Calcular tempo total de downtime
+  // Calcular tempo total de downtime com base em alert_downtime_start
   unsigned long totalDowntime = 0;
-  if (targetIndex >= 0 && targetIndex < 6 && alertStates[targetIndex].downtime_start > 0) {
-    totalDowntime = (millis() - alertStates[targetIndex].downtime_start) / 1000;
+  if (targetIndex >= 0 && targetIndex < 6 && alertStates[targetIndex].alert_downtime_start > 0) {
+    totalDowntime = (millis() - alertStates[targetIndex].alert_downtime_start) / 1000;
   }
   
   String message = formatAlertMessage(realTargetName, UP, latency, true, totalDowntime);
@@ -317,9 +343,20 @@ bool TelegramAlerts::isTimeForAlert(int targetIndex, bool isRecovery) {
   unsigned long now = millis();
   unsigned long cooldown = isRecovery ? ALERT_RECOVERY_COOLDOWN_MS : ALERT_COOLDOWN_MS;
   
-  // Se nunca enviou alerta (last_alert = 0), pode enviar
+  // Evitar enviar recovery como primeiro alerta (ex.: logo após o boot)
+  if (isRecovery && state.last_alert == 0) {
+    Serial.printf("[TELEGRAM] isTimeForAlert: targetIndex=%d, RECOVERY BLOQUEADO (primeiro alerta)\n", targetIndex);
+    return false;
+  }
+  // Se nunca enviou alerta (last_alert = 0), pode enviar (somente para ALERT)
   if (state.last_alert == 0) {
     Serial.printf("[TELEGRAM] isTimeForAlert: targetIndex=%d, PRIMEIRO ALERTA (last_alert=0)\n", targetIndex);
+    return true;
+  }
+
+  // Se for recovery e cooldown configurado para 0, permitir envio imediato
+  if (isRecovery && cooldown == 0) {
+    Serial.printf("[TELEGRAM] isTimeForAlert: targetIndex=%d, RECOVERY IMEDIATO (cooldown=0)\n", targetIndex);
     return true;
   }
   

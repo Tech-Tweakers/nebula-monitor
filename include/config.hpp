@@ -73,6 +73,7 @@ struct AlertState {
   unsigned long last_alert;   // Timestamp do último alerta
   bool alert_sent;            // Se já foi enviado alerta
   unsigned long downtime_start;  // Timestamp quando ficou DOWN
+  unsigned long alert_downtime_start; // Timestamp do início do downtime APÓS alertar DOWN
 };
 
 // Configurações de alertas - serão lidas do config.env
