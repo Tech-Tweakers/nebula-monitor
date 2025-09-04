@@ -142,7 +142,13 @@ void TelegramAlerts::sendAlert(int targetIndex, const char* targetName, Status s
     realTargetName = targetNames[targetIndex];
   }
   
-  String message = formatAlertMessage(realTargetName, status, latency, false, 0);
+  // Calcular downtime atual (em segundos) se já marcado início
+  unsigned long currentDowntime = 0;
+  if (targetIndex >= 0 && targetIndex < 6 && alertStates[targetIndex].downtime_start > 0) {
+    currentDowntime = (millis() - alertStates[targetIndex].downtime_start) / 1000;
+  }
+
+  String message = formatAlertMessage(realTargetName, status, latency, false, currentDowntime);
   Serial.printf("[TELEGRAM] Enviando alerta para target %d: %s\n", targetIndex, realTargetName);
   
   if (sendMessage(message)) {
@@ -218,7 +224,9 @@ String TelegramAlerts::formatAlertMessage(const char* targetName, Status status,
     if (latency > 0) {
       message += "⏱️ Última latência: " + String(latency) + " ms\n";
     }
-    message += "🕐 " + formatTime(millis() / 1000) + " de downtime\n";
+    if (totalDowntime > 0) {
+      message += "🕐 " + formatTime(totalDowntime) + " de downtime\n";
+    }
   }
   
   message += "\n🌌 _Nebula Monitor v2.3_";
