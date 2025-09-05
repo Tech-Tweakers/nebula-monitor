@@ -67,14 +67,14 @@ inline void updateStatusLed() {
   bool hasActiveAlerts = TelegramAlerts::hasActiveAlerts();
 
   if (isTelegramSending) {
-    // Blue
-    setStatusLed(false, false, true);
+    // Blue (invertido: usar vermelho)
+    setStatusLed(true, false, false);
   } else if (isScanning) {
-    // Blue (scanning)
-    setStatusLed(false, false, true);
+    // Blue (invertido: usar vermelho)
+    setStatusLed(true, false, false);
   } else if (hasActiveAlerts) {
-    // Yellow (Red + Green)
-    setStatusLed(true, true, false);
+    // Red (invertido: usar azul)
+    setStatusLed(false, false, true);
   } else {
     // Green (idle/ok)
     setStatusLed(false, true, false);
@@ -256,11 +256,11 @@ void updateFooterContent() {
         
         // Only recalculate targets every 2 seconds to save CPU
         if (millis() - last_targets_calc >= 2000) {
-          int active_alerts = 0, targets_up = 0;
-          for (int i = 0; i < N_TARGETS; i++) {
-            if (ScanManager::getTargetStatus(i) == DOWN) active_alerts++;
-            if (ScanManager::getTargetStatus(i) == UP) targets_up++;
-          }
+        int active_alerts = 0, targets_up = 0;
+        for (int i = 0; i < N_TARGETS; i++) {
+          if (ScanManager::getTargetStatus(i) == DOWN) active_alerts++;
+          if (ScanManager::getTargetStatus(i) == UP) targets_up++;
+        }
           last_active_alerts = active_alerts;
           last_targets_up = targets_up;
           last_targets_calc = millis();
@@ -303,11 +303,11 @@ void updateFooterContent() {
         
         // Only recalculate targets every 2 seconds to save CPU
         if (millis() - last_targets_calc >= 2000) {
-          int targets_up = 0, targets_down = 0;
-          for (int i = 0; i < N_TARGETS; i++) {
-            if (ScanManager::getTargetStatus(i) == UP) targets_up++;
-            else if (ScanManager::getTargetStatus(i) == DOWN) targets_down++;
-          }
+        int targets_up = 0, targets_down = 0;
+        for (int i = 0; i < N_TARGETS; i++) {
+          if (ScanManager::getTargetStatus(i) == UP) targets_up++;
+          else if (ScanManager::getTargetStatus(i) == DOWN) targets_down++;
+        }
           last_targets_up = targets_up;
           last_targets_down = targets_down;
           last_targets_calc = millis();
@@ -362,7 +362,7 @@ static void displayTask(void* pv) {
       ScanEvent ev;
       while (xQueueReceive(scan_event_queue, &ev, 0) == pdTRUE) {
         if (ev.type == EV_SCAN_START) {
-          setStatusLed(false, false, true); // BLUE while scanning
+          setStatusLed(true, false, false); // RED while scanning (invertido)
           updateFooterContent();
           lv_refr_now(lv_disp_get_default());
         } else if (ev.type == EV_SCAN_COMPLETE) {
@@ -396,8 +396,8 @@ static void displayTask(void* pv) {
             lv_obj_invalidate(status_labels[i]);
           }
           updateFooterContent();
-          if (anyDown) setStatusLed(true, false, false); // RED
-          else if (TelegramAlerts::isSendingMessage() || ScanManager::isActive()) setStatusLed(false, false, true); // BLUE
+          if (anyDown) setStatusLed(false, false, true); // BLUE (invertido)
+          else if (TelegramAlerts::isSendingMessage() || ScanManager::isActive()) setStatusLed(true, false, false); // RED (invertido)
           else setStatusLed(false, true, false); // GREEN
           lv_refr_now(lv_disp_get_default());
           last_scan_time = millis();
@@ -432,8 +432,8 @@ static void displayTask(void* pv) {
             for (int i = 0; i < N_TARGETS; i++) {
               if (ScanManager::getTargetStatus(i) == DOWN) { anyDown = true; break; }
             }
-            if (anyDown) setStatusLed(true, false, false);
-            else if (TelegramAlerts::isSendingMessage() || ScanManager::isActive()) setStatusLed(false, false, true);
+            if (anyDown) setStatusLed(false, false, true);
+            else if (TelegramAlerts::isSendingMessage() || ScanManager::isActive()) setStatusLed(true, false, false);
             else setStatusLed(false, true, false);
 
             lv_refr_now(lv_disp_get_default());
@@ -448,16 +448,7 @@ static void displayTask(void* pv) {
     // Small delay to give touch more processing time
     vTaskDelay(pdMS_TO_TICKS(10));
 
-    // Real-time LED priority while in loop: DOWN -> RED, else TELEGRAM/SCAN -> BLUE, else GREEN
-    bool anyDownRealtime = false;
-    for (int i = 0; i < N_TARGETS; i++) {
-      if (ScanManager::getTargetStatus(i) == DOWN) { anyDownRealtime = true; break; }
-    }
-    if (anyDownRealtime) setStatusLed(true, false, false);
-    else if (TelegramAlerts::isSendingMessage() || ScanManager::isActive()) setStatusLed(false, false, true);
-    else setStatusLed(false, true, false);
-
-    // Wi-Fi fail-safe: blink RED when disconnected (overrides other states)
+    // Wi-Fi fail-safe: blink RED when disconnected (highest priority)
     if (WiFi.status() != WL_CONNECTED) {
       static unsigned long lastBlink = 0;
       static bool on = false;
@@ -466,6 +457,15 @@ static void displayTask(void* pv) {
         lastBlink = millis();
         setStatusLed(on, false, false);
       }
+    } else {
+      // Real-time LED priority while in loop: DOWN -> RED, else TELEGRAM/SCAN -> BLUE, else GREEN
+      bool anyDownRealtime = false;
+      for (int i = 0; i < N_TARGETS; i++) {
+        if (ScanManager::getTargetStatus(i) == DOWN) { anyDownRealtime = true; break; }
+      }
+      if (anyDownRealtime) setStatusLed(false, false, true);
+      else if (TelegramAlerts::isSendingMessage() || ScanManager::isActive()) setStatusLed(true, false, false);
+      else setStatusLed(false, true, false);
     }
 
     // Periodic footer updates
@@ -675,6 +675,7 @@ void setup() {
   LED_PIN_G = ConfigManager::getLedPinG();
   LED_PIN_B = ConfigManager::getLedPinB();
   LED_ACTIVE_HIGH = ConfigManager::isLedActiveHigh();
+  
   LEDC_FREQ = ConfigManager::getLedPwmFreq();
   LEDC_RES_BITS = ConfigManager::getLedPwmResBits();
   LED_BRIGHT_R = ConfigManager::getLedBrightR();
@@ -866,7 +867,7 @@ void setup() {
     &scanner_task_handle,
     0
   );
-  
+
   Serial.println("[MAIN] Setup completo! Interface pronta com footer!");
 }
 
