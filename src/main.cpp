@@ -15,6 +15,16 @@
 #include "freertos/task.h"
 #include "freertos/queue.h"
 
+// LED Status States - Priority order (higher number = higher priority)
+enum class LEDStatus {
+  OFF = 0,           // All LEDs off
+  SYSTEM_OK = 1,     // Green LED - System idle/OK
+  TARGETS_DOWN = 2,  // Blue LED - Active alerts (targets down)
+  SCANNING = 3,      // Red LED - Scanning in progress
+  TELEGRAM = 4,      // Red LED - Telegram sending
+  WIFI_DISCONNECTED = 5  // Red LED blinking - WiFi disconnected
+};
+
 // Network targets - will be loaded dynamically from config.env
 static Target targets[10]; // Dynamic array for targets
 static int N_TARGETS = 0;  // Number of loaded targets
@@ -42,6 +52,42 @@ static int last_led_r = -1;
 static int last_led_g = -1;
 static int last_led_b = -1;
 
+// Current LED status
+static LEDStatus current_led_status = LEDStatus::OFF;
+
+// Determine the current LED status based on system conditions
+LEDStatus determineLEDStatus() {
+  // Check WiFi status first (highest priority)
+  if (WiFi.status() != WL_CONNECTED) {
+    return LEDStatus::WIFI_DISCONNECTED;
+  }
+  
+  // Check if Telegram is sending (high priority)
+  if (TelegramAlerts::isSendingMessage()) {
+    return LEDStatus::TELEGRAM;
+  }
+  
+  // Check if scanning is active (high priority)
+  if (ScanManager::isActive()) {
+    return LEDStatus::SCANNING;
+  }
+  
+  // Check if there are active alerts (targets down)
+  if (TelegramAlerts::hasActiveAlerts()) {
+    return LEDStatus::TARGETS_DOWN;
+  }
+  
+  // Check if any targets are down (realtime check)
+  for (int i = 0; i < N_TARGETS; i++) {
+    if (ScanManager::getTargetStatus(i) == DOWN) {
+      return LEDStatus::TARGETS_DOWN;
+    }
+  }
+  
+  // System is OK
+  return LEDStatus::SYSTEM_OK;
+}
+
 inline void setStatusLed(bool r_on, bool g_on, bool b_on) {
   // Compute target brightness per channel
   const int r_brightness = r_on ? LED_BRIGHT_R : 0;
@@ -61,25 +107,43 @@ inline void setStatusLed(bool r_on, bool g_on, bool b_on) {
   ledcWrite(LEDC_CHANNEL_B, b_duty);
 }
 
-inline void updateStatusLed() {
-  bool isScanning = ScanManager::isActive();
-  bool isTelegramSending = TelegramAlerts::isSendingMessage();
-  bool hasActiveAlerts = TelegramAlerts::hasActiveAlerts();
-
-  if (isTelegramSending) {
-    // Red LED: Telegram sending
-    setStatusLed(true, false, false);
-  } else if (isScanning) {
-    // Red LED: Scanning in progress
-    setStatusLed(true, false, false);
-  } else if (hasActiveAlerts) {
-    // Blue LED: Active alerts (targets down)
-    setStatusLed(false, false, true);
-  } else {
-    // Green LED: System idle/OK
-    setStatusLed(false, true, false);
+// Centralized LED update function
+void updateStatusLed() {
+  LEDStatus new_status = determineLEDStatus();
+  
+  // Only update if status changed
+  if (new_status == current_led_status) {
+    return;
+  }
+  
+  current_led_status = new_status;
+  
+  // Set LED based on status
+  switch (current_led_status) {
+    case LEDStatus::OFF:
+      setStatusLed(false, false, false);
+      break;
+      
+    case LEDStatus::SYSTEM_OK:
+      setStatusLed(false, true, false);  // Green LED
+      break;
+      
+    case LEDStatus::TARGETS_DOWN:
+      setStatusLed(false, false, true);  // Blue LED
+      break;
+      
+    case LEDStatus::SCANNING:
+    case LEDStatus::TELEGRAM:
+      setStatusLed(true, false, false);  // Red LED
+      break;
+      
+    case LEDStatus::WIFI_DISCONNECTED:
+      // This will be handled by the blinking logic in the main loop
+      setStatusLed(true, false, false);  // Red LED
+      break;
   }
 }
+
 
 // Function to load targets from ConfigManager
 void loadTargetsFromConfig() {
@@ -361,7 +425,7 @@ static void displayTask(void* pv) {
       ScanEvent ev;
       while (xQueueReceive(scan_event_queue, &ev, 0) == pdTRUE) {
         if (ev.type == EV_SCAN_START) {
-          setStatusLed(true, false, false); // Red LED: Scanning started
+          updateStatusLed(); // Update LED status
           updateFooterContent();
           lv_refr_now(lv_disp_get_default());
         } else if (ev.type == EV_SCAN_COMPLETE) {
@@ -395,9 +459,7 @@ static void displayTask(void* pv) {
             lv_obj_invalidate(status_labels[i]);
           }
           updateFooterContent();
-          if (anyDown) setStatusLed(false, false, true); // Blue LED: Targets down
-          else if (TelegramAlerts::isSendingMessage() || ScanManager::isActive()) setStatusLed(true, false, false); // Red LED: Telegram/Scanning
-          else setStatusLed(false, true, false); // Green LED: System OK
+          updateStatusLed(); // Update LED status based on current system state
           lv_refr_now(lv_disp_get_default());
           last_scan_time = millis();
         } else if (ev.type == EV_TARGET_UPDATE) {
@@ -431,9 +493,7 @@ static void displayTask(void* pv) {
             for (int i = 0; i < N_TARGETS; i++) {
               if (ScanManager::getTargetStatus(i) == DOWN) { anyDown = true; break; }
             }
-            if (anyDown) setStatusLed(false, false, true); // Blue LED: Targets down
-            else if (TelegramAlerts::isSendingMessage() || ScanManager::isActive()) setStatusLed(true, false, false); // Red LED: Telegram/Scanning
-            else setStatusLed(false, true, false); // Green LED: System OK
+            updateStatusLed(); // Update LED status based on current system state
 
             lv_refr_now(lv_disp_get_default());
           }
@@ -454,7 +514,12 @@ static void displayTask(void* pv) {
       if (millis() - lastBlink >= 500) {
         on = !on;
         lastBlink = millis();
-        setStatusLed(on, false, false); // Red LED: WiFi disconnected
+        // Handle WiFi disconnected blinking - override normal LED logic
+        if (on) {
+          setStatusLed(true, false, false);  // Red LED on
+        } else {
+          setStatusLed(false, false, false); // All LEDs off
+        }
       }
     } else {
       // Real-time LED priority: Targets down -> Blue, Telegram/Scan -> Red, else Green
@@ -462,9 +527,7 @@ static void displayTask(void* pv) {
       for (int i = 0; i < N_TARGETS; i++) {
         if (ScanManager::getTargetStatus(i) == DOWN) { anyDownRealtime = true; break; }
       }
-      if (anyDownRealtime) setStatusLed(false, false, true); // Blue LED: Targets down
-      else if (TelegramAlerts::isSendingMessage() || ScanManager::isActive()) setStatusLed(true, false, false); // Red LED: Telegram/Scanning
-      else setStatusLed(false, true, false); // Green LED: System OK
+      updateStatusLed(); // Update LED status based on current system state
     }
 
     // Periodic footer updates
