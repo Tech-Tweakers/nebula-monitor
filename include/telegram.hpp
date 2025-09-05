@@ -38,6 +38,9 @@ public:
   bool hasAlertBeenSent() const;
   unsigned long getLastAlertTime() const;
   
+  // Setters
+  void setTargetName(const char* name);
+  
   // Debug
   void printState() const;
 };
