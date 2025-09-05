@@ -87,7 +87,7 @@ void Alert::markRecovered() {
 }
 
 unsigned long Alert::getDowntime() const {
-  return firstFailureTime > 0 ? (millis() - firstFailureTime) : 0;
+  return firstFailureTime > 0 ? (millis() - firstFailureTime) / 1000 : 0;
 }
 
 void Alert::setTargetName(const String& name) {

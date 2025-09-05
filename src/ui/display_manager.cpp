@@ -276,7 +276,6 @@ void DisplayManager::handleTouch() {
 
 void DisplayManager::onFooterTouched() {
   cycleFooterMode();
-  Serial.printf("[DISPLAY] Footer mode changed to %d\n", footer_mode);
 }
 
 void DisplayManager::onStatusItemTouched(int index) {

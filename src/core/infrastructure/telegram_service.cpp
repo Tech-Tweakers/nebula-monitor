@@ -109,8 +109,7 @@ void TelegramService::sendTestMessage() {
   }
 
   String testMessage = "🤖 <b>Nebula Monitor v2.4</b>\n";
-  testMessage += "✅ Telegram service is working!\n";
-  testMessage += "🕐 Test time: " + String(millis()) + "ms";
+  testMessage += "✅ Service is active!";
   
   sendMessage(testMessage);
 }
@@ -159,13 +158,23 @@ String TelegramService::formatAlertMessage(const String& targetName, Status stat
 
 String TelegramService::formatTime(unsigned long seconds) const {
   if (seconds < 60) {
-    return String(seconds) + "s";
+    return String(seconds) + " segundos";
   } else if (seconds < 3600) {
-    return String(seconds / 60) + "m " + String(seconds % 60) + "s";
+    unsigned long minutes = seconds / 60;
+    unsigned long remainingSeconds = seconds % 60;
+    if (remainingSeconds == 0) {
+      return String(minutes) + " minuto" + (minutes > 1 ? "s" : "");
+    } else {
+      return String(minutes) + " minuto" + (minutes > 1 ? "s" : "") + " e " + String(remainingSeconds) + " segundo" + (remainingSeconds > 1 ? "s" : "");
+    }
   } else {
     unsigned long hours = seconds / 3600;
     unsigned long minutes = (seconds % 3600) / 60;
-    return String(hours) + "h " + String(minutes) + "m";
+    if (minutes == 0) {
+      return String(hours) + " hora" + (hours > 1 ? "s" : "");
+    } else {
+      return String(hours) + " hora" + (hours > 1 ? "s" : "") + " e " + String(minutes) + " minuto" + (minutes > 1 ? "s" : "");
+    }
   }
 }
 
