@@ -23,10 +23,10 @@ struct ScanResult {
 static ScanResult scanResults[6]; // Array local para resultados
 
 bool ScanManager::begin(const Target* targetArray, int count) {
-  Serial.println("[SCAN] Inicializando Scan Manager...");
+  Serial.println("[SCAN] Initializing Scan Manager...");
   
   if (!targetArray || count <= 0) {
-    Serial.println("[SCAN] ERRO: Targets inválidos!");
+    Serial.println("[SCAN] ERROR: Invalid targets!");
     return false;
   }
   
@@ -42,7 +42,7 @@ bool ScanManager::begin(const Target* targetArray, int count) {
     scanResults[i].lat_ms = 0;
   }
   
-  Serial.printf("[SCAN] Scan Manager inicializado com %d targets\n", count);
+  Serial.printf("[SCAN] Scan Manager initialized with %d targets\n", count);
   return true;
 }
 
@@ -54,18 +54,18 @@ void ScanManager::startScanning() {
   isScanning = true;
   currentTarget = 0;
   lastScanTime = millis();
-  Serial.println("[SCAN] Scanning iniciado");
+  Serial.println("[SCAN] Scanning started");
   if (onScanStart) onScanStart();
 }
 
 void ScanManager::stopScanning() {
   isScanning = false;
-  Serial.println("[SCAN] Scanning parado");
+  Serial.println("[SCAN] Scanning stopped");
 }
 
 void ScanManager::setInterval(uint32_t interval_ms) {
   scanInterval = interval_ms;
-  Serial.printf("[SCAN] Intervalo definido para %lu ms\n", interval_ms);
+  Serial.printf("[SCAN] Interval set to %lu ms\n", interval_ms);
 }
 
 void ScanManager::update() {
@@ -75,19 +75,19 @@ void ScanManager::update() {
   
   // Verificar se é hora de fazer o próximo scan
   if (now - lastScanTime >= scanInterval) {
-    Serial.println("[SCAN] Iniciando novo ciclo de scan...");
+    Serial.println("[SCAN] Starting new scan cycle...");
     isScanning = true; // Mark scan as active
     if (onScanStart) onScanStart();
     
     // Fazer scan real para todos os targets
     for (int i = 0; i < targetCount; i++) {
-      Serial.printf("[SCAN] Verificando %s (tipo: %s)...\n", 
+      Serial.printf("[SCAN] Checking %s (type: %s)...\n", 
                    targets[i].name, 
                    targets[i].monitor_type == HEALTH_CHECK ? "HEALTH_CHECK" : "PING");
       
       // Proteção contra crash
       if (WiFi.status() != WL_CONNECTED) {
-        Serial.println("[SCAN] WiFi desconectado, pulando scan");
+        Serial.println("[SCAN] WiFi disconnected, skipping scan");
         break;
       }
       
@@ -96,11 +96,11 @@ void ScanManager::update() {
       // Escolher tipo de verificação baseado na configuração
       if (targets[i].monitor_type == HEALTH_CHECK) {
         // Health check via API endpoint
-        Serial.printf("[SCAN] Fazendo health check para %s...\n", targets[i].name);
+        Serial.printf("[SCAN] Performing health check for %s...\n", targets[i].name);
         latency = healthCheckTarget(targets[i].url, targets[i].health_endpoint);
       } else {
         // Ping simples
-        Serial.printf("[SCAN] Fazendo ping para %s...\n", targets[i].name);
+        Serial.printf("[SCAN] Performing ping for %s...\n", targets[i].name);
         latency = pingTarget(targets[i].url);
       }
       
@@ -127,12 +127,12 @@ void ScanManager::update() {
       
       // Verificar se não travou
       if (millis() - now > 30000) { // 30 segundos máximo
-        Serial.println("[SCAN] Timeout de segurança, parando scan");
+        Serial.println("[SCAN] Safety timeout, stopping scan");
         break;
       }
     }
     
-    Serial.println("[SCAN] Ciclo de scan completo");
+    Serial.println("[SCAN] Scan cycle complete");
     lastScanTime = now;
     isScanning = false; // Mark scan as complete
     if (onScanComplete) onScanComplete();
@@ -153,7 +153,7 @@ Status ScanManager::getTargetStatus(int index) {
     DEBUG_LOGF("[SCAN] getTargetStatus(%d) = %d\n", index, status);
     return status;
   }
-  DEBUG_LOGF("[SCAN] getTargetStatus(%d) = UNKNOWN (índice inválido)\n", index);
+  DEBUG_LOGF("[SCAN] getTargetStatus(%d) = UNKNOWN (invalid index)\n", index);
   return UNKNOWN;
 }
 
@@ -185,7 +185,7 @@ uint16_t ScanManager::healthCheckTarget(const char* base_url, const char* health
   }
   full_url += health_endpoint;
   
-  Serial.printf("[HEALTH] Verificando health endpoint: %s\n", full_url.c_str());
+  Serial.printf("[HEALTH] Checking health endpoint: %s\n", full_url.c_str());
   
   // Para endpoints ngrok, tentar com timeout maior e retry
   uint16_t timeout = 7000;
@@ -198,12 +198,12 @@ uint16_t ScanManager::healthCheckTarget(const char* base_url, const char* health
   
   // Se falhou e é ngrok, tentar HTTP como fallback
   if (latency == 0 && strstr(base_url, "ngrok-free.app")) {
-    Serial.printf("[HEALTH] HTTPS falhou, tentando HTTP como fallback...\n");
+    Serial.printf("[HEALTH] HTTPS failed, trying HTTP as fallback...\n");
     String http_url = full_url;
     http_url.replace("https://", "http://");
     latency = Net::httpPing(http_url.c_str(), timeout);
     if (latency > 0) {
-      Serial.printf("[HEALTH] HTTP fallback funcionou: %d ms\n", latency);
+      Serial.printf("[HEALTH] HTTP fallback worked: %d ms\n", latency);
     }
   }
   
@@ -217,13 +217,13 @@ uint16_t ScanManager::healthCheckTarget(const char* base_url, const char* health
         Serial.printf("[HEALTH] Health check OK: %d ms (status: healthy)\n", latency);
         return latency;
       } else {
-        Serial.printf("[HEALTH] Health check FAILED: status não é healthy\n");
+        Serial.printf("[HEALTH] Health check FAILED: status is not healthy\n");
         Serial.printf("[HEALTH] Payload: %s\n", payload.c_str());
         return 0;
       }
     } else {
       // Se não conseguiu obter payload, considerar como OK se HTTP respondeu
-      Serial.printf("[HEALTH] Health check OK: %d ms (sem verificação de payload)\n", latency);
+      Serial.printf("[HEALTH] Health check OK: %d ms (without payload verification)\n", latency);
       return latency;
     }
   } else {
@@ -235,7 +235,7 @@ uint16_t ScanManager::healthCheckTarget(const char* base_url, const char* health
 // Função para obter o payload completo do health check
 String ScanManager::getHealthCheckPayload(const char* url, uint16_t timeout) {
   if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("[HEALTH] WiFi não conectado para obter payload");
+    Serial.println("[HEALTH] WiFi not connected to get payload");
     return "";
   }
   
@@ -264,7 +264,7 @@ String ScanManager::getHealthCheckPayload(const char* url, uint16_t timeout) {
       if (code > 0) {
         String payload = http.getString();
         http.end();
-        Serial.printf("[HEALTH] Payload obtido: %s\n", payload.c_str());
+        Serial.printf("[HEALTH] Payload obtained: %s\n", payload.c_str());
         return payload;
       }
     }
@@ -283,15 +283,13 @@ String ScanManager::getHealthCheckPayload(const char* url, uint16_t timeout) {
       if (code > 0) {
         String payload = http.getString();
         http.end();
-        Serial.printf("[HEALTH] Payload obtido: %s\n", payload.c_str());
+        Serial.printf("[HEALTH] Payload obtained: %s\n", payload.c_str());
         return payload;
       }
     }
   }
   
   http.end();
-  Serial.println("[HEALTH] Falha ao obter payload");
+  Serial.println("[HEALTH] Failed to get payload");
   return "";
 }
-
-// Função removida: updateScanner() - não utilizada

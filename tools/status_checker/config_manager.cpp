@@ -9,37 +9,37 @@ int ConfigManager::configCount = 0;
 bool ConfigManager::begin() {
   if (initialized) return true;
   
-  Serial.println("[CONFIG] Initializing ConfigManager...");
+  Serial.println("[CONFIG] Inicializando ConfigManager...");
   
   // Inicializar SPIFFS
-  Serial.println("[CONFIG] Initializing SPIFFS...");
+  Serial.println("[CONFIG] Inicializando SPIFFS...");
   if (!SPIFFS.begin(true)) {
-    Serial.println("[CONFIG] Error initializing SPIFFS!");
+    Serial.println("[CONFIG] Erro ao inicializar SPIFFS!");
     return false;
   }
-  Serial.println("[CONFIG] SPIFFS initialized successfully!");
+  Serial.println("[CONFIG] SPIFFS inicializado com sucesso!");
   
   // Listar arquivos no SPIFFS
-  Serial.println("[CONFIG] Listing files in SPIFFS:");
+  Serial.println("[CONFIG] Listando arquivos no SPIFFS:");
   File root = SPIFFS.open("/");
   File file = root.openNextFile();
   while (file) {
-    Serial.printf("[CONFIG] File: %s (size: %d bytes)\n", file.name(), file.size());
+    Serial.printf("[CONFIG] Arquivo: %s (tamanho: %d bytes)\n", file.name(), file.size());
     file = root.openNextFile();
   }
   
   // Verificar se arquivo existe
-  Serial.println("[CONFIG] Checking if config.env exists...");
+  Serial.println("[CONFIG] Verificando se config.env existe...");
   if (!SPIFFS.exists("/config.env")) {
-    Serial.println("[CONFIG] config.env file not found!");
+    Serial.println("[CONFIG] Arquivo config.env não encontrado!");
     return false;
   }
-  Serial.println("[CONFIG] config.env file found!");
+  Serial.println("[CONFIG] Arquivo config.env encontrado!");
   
   // Ler arquivo de configuração
   file = SPIFFS.open("/config.env", "r");
   if (!file) {
-    Serial.println("[CONFIG] Error opening config.env!");
+    Serial.println("[CONFIG] Erro ao abrir config.env!");
     return false;
   }
   
@@ -66,7 +66,7 @@ bool ConfigManager::begin() {
   file.close();
   initialized = true;
   
-  Serial.printf("[CONFIG] ConfigManager initialized with %d configurations\n", configCount);
+  Serial.printf("[CONFIG] ConfigManager inicializado com %d configurações\n", configCount);
   return true;
 }
 
@@ -169,14 +169,14 @@ int ConfigManager::getTargetCount() {
   for (int i = 1; i <= 10; i++) {
     String key = "TARGET_" + String(i);
     String value = getValue(key.c_str(), "");
-    Serial.printf("[CONFIG] Checking %s: '%s' (length=%d)\n", key.c_str(), value.c_str(), value.length());
+    Serial.printf("[CONFIG] Verificando %s: '%s' (length=%d)\n", key.c_str(), value.c_str(), value.length());
     if (value.length() > 0) {
       count++;
     } else {
       break;
     }
   }
-  Serial.printf("[CONFIG] Total targets found: %d\n", count);
+  Serial.printf("[CONFIG] Total de targets encontrados: %d\n", count);
   return count;
 }
 
@@ -295,7 +295,7 @@ unsigned long ConfigManager::getHttpTimeoutMs() {
 
 // Debug
 void ConfigManager::printAllConfigs() {
-  Serial.println("[CONFIG] === All configurations ===");
+  Serial.println("[CONFIG] === Todas as configurações ===");
   for (int i = 0; i < configCount; i++) {
     if (configKeys[i] != nullptr) {
       Serial.printf("[CONFIG] %s = %s\n", configKeys[i], configValues[i].c_str());
