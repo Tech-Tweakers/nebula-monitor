@@ -6,6 +6,8 @@
 #include "net.hpp"
 #include "scan.hpp"
 #include "telegram.hpp"
+#include "sd_config_manager.hpp"
+#include "ntp_manager.hpp"
 #include <lvgl.h>
 
 // FreeRTOS (ESP32) for multi-core tasks
@@ -68,8 +70,8 @@ inline void updateStatusLed() {
     // Blue
     setStatusLed(false, false, true);
   } else if (isScanning) {
-    // Red
-    setStatusLed(true, false, false);
+    // Blue (scanning)
+    setStatusLed(false, false, true);
   } else if (hasActiveAlerts) {
     // Yellow (Red + Green)
     setStatusLed(true, true, false);
@@ -587,7 +589,7 @@ void setup() {
   Serial.begin(115200);
   LOGLN("[MAIN] Iniciando Nebula Monitor v2.3...");
   
-  // Inicializar ConfigManager
+  // Inicializar ConfigManager (lê do SPIFFS - sem NTP ainda)
   Serial.println("[MAIN] Inicializando ConfigManager...");
   if (!ConfigManager::begin()) {
     Serial.println("[MAIN] ERRO: Falha ao inicializar ConfigManager!");
@@ -607,13 +609,13 @@ void setup() {
                   TOUCH_LOGS_ENABLED ? "ON" : "OFF", 
                   ALL_LOGS_ENABLED ? "ON" : "OFF");
   }
-  
+
   // Carregar targets do config.env
   Serial.println("[MAIN] Carregando targets...");
   loadTargetsFromConfig();
   Serial.printf("[MAIN] %d targets carregados com sucesso!\n", N_TARGETS);
   
-  // Connect to WiFi
+  // Connect to WiFi PRIMEIRO
   LOGLN("[MAIN] Conectando ao WiFi...");
   if (!Net::connectWiFi(WIFI_SSID, WIFI_PASS)) {
     LOGLN("[MAIN] ERRO: Falha ao conectar WiFi!");
@@ -621,6 +623,41 @@ void setup() {
   } else {
     LOGLN("[MAIN] WiFi conectado com sucesso!");
     Net::printInfo();
+  }
+  
+  // Inicializar NTP DEPOIS do WiFi
+  Serial.println("[MAIN] Inicializando NTP...");
+  if (!NTPManager::begin()) {
+    Serial.println("[MAIN] ERRO: Falha ao inicializar NTP!");
+    Serial.println("[MAIN] Continuando sem NTP...");
+  } else {
+    Serial.println("[MAIN] NTP inicializado com sucesso!");
+  }
+  
+  // ===== ALVENARIA DE SOFTWARE =====
+  // Agora que temos WiFi e NTP, podemos usar SDConfigManager
+  Serial.println("[MAIN] Inicializando SDConfigManager...");
+  if (!SDConfigManager::begin()) {
+    Serial.println("[MAIN] ERRO: Falha ao inicializar SDConfigManager!");
+    Serial.println("[MAIN] Continuando sem SD...");
+  } else {
+    Serial.println("[MAIN] SDConfigManager inicializado!");
+    
+    // Verificar se SD tem config mais nova que SPIFFS
+    if (SDConfigManager::hasNewerConfig()) {
+      Serial.println("[MAIN] SD tem config mais nova! Copiando para SPIFFS...");
+      
+      if (SDConfigManager::copySDToSPIFFS()) {
+        Serial.println("[MAIN] Config copiada com sucesso! Reiniciando...");
+        delay(3000); // Dar tempo para logs e evitar loops
+        ESP.restart(); // Reiniciar para carregar nova config
+      } else {
+        Serial.println("[MAIN] ERRO: Falha ao copiar config do SD!");
+        Serial.println("[MAIN] Continuando com config do SPIFFS...");
+      }
+    } else {
+      Serial.println("[MAIN] SPIFFS já tem a config mais recente!");
+    }
   }
   
   start_time = millis(); // Initialize start time for uptime calculation
