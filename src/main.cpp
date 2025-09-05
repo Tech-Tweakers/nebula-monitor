@@ -732,7 +732,7 @@ void setup() {
     telegram_initialized = true;
     // Send initialization message
     delay(2000); // Wait a bit
-    sendTestTelegramAlert();
+    sendTestTelegramAlert(targets, N_TARGETS);
   } else {
     LOGLN("[MAIN] Telegram alerts system not initialized (configuration required)");
     telegram_initialized = false;

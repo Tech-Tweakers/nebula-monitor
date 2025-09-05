@@ -48,5 +48,5 @@ public:
 // Funções de conveniência
 bool initTelegramAlerts();
 void updateTelegramAlert(int targetIndex, Status status, uint16_t latency);
-void sendTestTelegramAlert();
+void sendTestTelegramAlert(Target* targets, int targetCount);
 

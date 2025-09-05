@@ -399,12 +399,24 @@ void updateTelegramAlert(int targetIndex, Status status, uint16_t latency) {
   TelegramAlerts::updateTargetStatus(targetIndex, status, latency);
 }
 
-void sendTestTelegramAlert() {
+void sendTestTelegramAlert(Target* targets, int targetCount) {
   if (TelegramAlerts::isActive()) {
     String message = "🚀 *Nebula Monitor v2.3*\n\n";
-    message += "📊 *Monitorando:* " + String(6) + " targets\n";
-    message += "🔔 *Threshold:* " + String(MAX_FAILURES_BEFORE_ALERT) + " falhas\n";
+    message += "📊 *Monitoring:* " + String(targetCount) + " targets\n";
+    message += "🔔 *Threshold:* " + String(MAX_FAILURES_BEFORE_ALERT) + " fails\n";
     message += "⏰ *Cooldown:* " + String(ALERT_COOLDOWN_MS / 1000) + "s\n\n";
+    
+    // List all targets being monitored
+    message += "🎯 *Targets:*\n";
+    for (int i = 0; i < targetCount; i++) {
+      message += "• " + String(targets[i].name) + "\n";
+      message += "  `" + String(targets[i].url) + "`\n";
+      if (targets[i].health_endpoint != nullptr) {
+        message += "  Health: `" + String(targets[i].health_endpoint) + "`\n";
+      }
+      message += "  Type: " + String(targets[i].monitor_type == HEALTH_CHECK ? "Health Check" : "Ping") + "\n\n";
+    }
+    
     message += "_Tech Tweakers - 2025_";
     
     TelegramAlerts::sendMessage(message);
