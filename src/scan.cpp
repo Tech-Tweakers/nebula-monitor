@@ -264,7 +264,7 @@ String ScanManager::getHealthCheckPayload(const char* url, uint16_t timeout) {
       if (code > 0) {
         String payload = http.getString();
         http.end();
-        Serial.printf("[HEALTH] Payload obtido: %s\n", payload.c_str());
+        Serial.printf("[HEALTH] Payload obtained: %s\n", payload.c_str());
         return payload;
       }
     }
@@ -283,7 +283,7 @@ String ScanManager::getHealthCheckPayload(const char* url, uint16_t timeout) {
       if (code > 0) {
         String payload = http.getString();
         http.end();
-        Serial.printf("[HEALTH] Payload obtido: %s\n", payload.c_str());
+        Serial.printf("[HEALTH] Payload obtained: %s\n", payload.c_str());
         return payload;
       }
     }
