@@ -18,7 +18,7 @@ public:
   // Configuração - funções removidas (não utilizadas)
   
   // Controle de alertas
-  static void updateTargetStatus(int targetIndex, Status newStatus, uint16_t latency);
+  static void updateTargetStatus(int targetIndex, Status newStatus, uint16_t latency, const char* targetName);
   static void sendAlert(int targetIndex, const char* targetName, Status status, uint16_t latency);
   static void sendRecoveryAlert(int targetIndex, const char* targetName, uint16_t latency);
   
