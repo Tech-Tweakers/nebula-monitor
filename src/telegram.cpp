@@ -407,15 +407,12 @@ void sendTestTelegramAlert(Target* targets, int targetCount) {
     message += "⏰ *Cooldown:* " + String(ALERT_COOLDOWN_MS / 1000) + "s\n\n";
     
     // List all targets being monitored
-    message += "🎯 *Targets:*\n";
+    message += "🎯 *Targets:* ";
     for (int i = 0; i < targetCount; i++) {
-      message += "• " + String(targets[i].name) + "\n";
-      message += "  `" + String(targets[i].url) + "`\n";
-      if (targets[i].health_endpoint != nullptr) {
-        message += "  Health: `" + String(targets[i].health_endpoint) + "`\n";
-      }
-      message += "  Type: " + String(targets[i].monitor_type == HEALTH_CHECK ? "Health Check" : "Ping") + "\n\n";
+      if (i > 0) message += ", ";
+      message += String(targets[i].name);
     }
+    message += "\n\n";
     
     message += "_Tech Tweakers - 2025_";
     
