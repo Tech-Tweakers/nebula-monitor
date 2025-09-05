@@ -54,18 +54,18 @@ void ScanManager::startScanning() {
   isScanning = true;
   currentTarget = 0;
   lastScanTime = millis();
-  Serial.println("[SCAN] Scanning iniciado");
+  Serial.println("[SCAN] Scanning started");
   if (onScanStart) onScanStart();
 }
 
 void ScanManager::stopScanning() {
   isScanning = false;
-  Serial.println("[SCAN] Scanning parado");
+  Serial.println("[SCAN] Scanning stopped");
 }
 
 void ScanManager::setInterval(uint32_t interval_ms) {
   scanInterval = interval_ms;
-  Serial.printf("[SCAN] Intervalo definido para %lu ms\n", interval_ms);
+  Serial.printf("[SCAN] Interval set to %lu ms\n", interval_ms);
 }
 
 void ScanManager::update() {
@@ -81,13 +81,13 @@ void ScanManager::update() {
     
     // Fazer scan real para todos os targets
     for (int i = 0; i < targetCount; i++) {
-      Serial.printf("[SCAN] Verificando %s (tipo: %s)...\n", 
+      Serial.printf("[SCAN] Checking %s (type: %s)...\n", 
                    targets[i].name, 
                    targets[i].monitor_type == HEALTH_CHECK ? "HEALTH_CHECK" : "PING");
       
       // Proteção contra crash
       if (WiFi.status() != WL_CONNECTED) {
-        Serial.println("[SCAN] WiFi desconectado, pulando scan");
+        Serial.println("[SCAN] WiFi disconnected, skipping scan");
         break;
       }
       
@@ -153,7 +153,7 @@ Status ScanManager::getTargetStatus(int index) {
     DEBUG_LOGF("[SCAN] getTargetStatus(%d) = %d\n", index, status);
     return status;
   }
-  DEBUG_LOGF("[SCAN] getTargetStatus(%d) = UNKNOWN (índice inválido)\n", index);
+  DEBUG_LOGF("[SCAN] getTargetStatus(%d) = UNKNOWN (invalid index)\n", index);
   return UNKNOWN;
 }
 
