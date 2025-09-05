@@ -46,9 +46,8 @@ void Alert::updateStatus(Status newStatus, uint16_t latency) {
 bool Alert::shouldSendAlert() {
   if (currentStatus != DOWN) return false;
   if (failureCount < MAX_FAILURES_BEFORE_ALERT) return false;
-  if (alertSent) return false;
   
-  // Check cooldown
+  // Check cooldown - allow re-sending after cooldown period
   unsigned long now = millis();
   if (lastAlertTime > 0 && (now - lastAlertTime) < ALERT_COOLDOWN_MS) {
     return false;
