@@ -33,6 +33,11 @@ void Alert::updateStatus(Status newStatus, uint16_t latency) {
       Serial.printf("[ALERT] %s: Recovery detected\n", targetName.c_str());
       if (alertSent) {
         markRecovered();
+      } else {
+        // Reset downtime tracking even if no alert was sent
+        firstFailureTime = 0;
+        failureCount = 0;
+        Serial.printf("[ALERT] %s: Quick recovery - resetting downtime tracking\n", targetName.c_str());
       }
     }
   } else if (newStatus == DOWN) {
