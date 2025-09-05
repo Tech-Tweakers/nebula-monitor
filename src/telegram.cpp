@@ -2,11 +2,134 @@
 #include "net.hpp"
 #include <HTTPClient.h>
 
+// ===== IMPLEMENTAÇÃO DA CLASSE ALERT =====
+
+// Constructor
+Alert::Alert(int index, const char* name) 
+  : targetIndex(index), targetName(name ? name : "Unknown"), 
+    currentStatus(UNKNOWN), lastStatus(UNKNOWN), failureCount(0),
+    firstFailureTime(0), lastAlertTime(0), isActive(false), 
+    alertSent(false), lastLatency(0), alertDowntimeStart(0) {
+}
+
+// Update status and handle alert logic
+void Alert::updateStatus(Status newStatus, uint16_t latency) {
+  lastLatency = latency;
+  
+  if (currentStatus != newStatus) {
+    lastStatus = currentStatus;
+    currentStatus = newStatus;
+    
+    if (newStatus == DOWN) {
+      // Target went down
+      failureCount++;
+      if (failureCount == 1) {
+        firstFailureTime = millis();
+        Serial.printf("[ALERT] %s: Downtime started\n", targetName.c_str());
+      }
+      Serial.printf("[ALERT] %s: Failure #%d\n", targetName.c_str(), failureCount);
+    } else if (newStatus == UP && lastStatus == DOWN) {
+      // Recovery detected
+      Serial.printf("[ALERT] %s: Recovery detected\n", targetName.c_str());
+      if (alertSent) {
+        // Don't mark as recovered yet - let the recovery logic handle it
+        // markRecovered(); // Moved to after recovery check
+      } else {
+        // Reset downtime tracking even if no alert was sent
+        firstFailureTime = 0;
+        failureCount = 0;
+        Serial.printf("[ALERT] %s: Quick recovery - resetting downtime tracking\n", targetName.c_str());
+      }
+    }
+  } else if (newStatus == DOWN) {
+    // Continuous failure
+    failureCount++;
+    Serial.printf("[ALERT] %s: Continuous failure #%d\n", targetName.c_str(), failureCount);
+  }
+}
+
+// Check if should send alert
+bool Alert::shouldSendAlert() {
+  if (currentStatus != DOWN) return false;
+  if (failureCount < MAX_FAILURES_BEFORE_ALERT) return false;
+  
+  // Check cooldown - allow re-sending after cooldown period
+  unsigned long now = millis();
+  if (lastAlertTime > 0 && (now - lastAlertTime) < ALERT_COOLDOWN_MS) {
+    return false;
+  }
+  
+  return true;
+}
+
+// Check if should send recovery
+bool Alert::shouldSendRecovery() {
+  if (currentStatus != UP) return false;
+  if (!alertSent) return false;
+  if (alertDowntimeStart == 0) return false;
+  
+  // Check recovery cooldown
+  unsigned long now = millis();
+  if (lastAlertTime > 0 && (now - lastAlertTime) < ALERT_RECOVERY_COOLDOWN_MS) {
+    return false;
+  }
+  
+  return true;
+}
+
+// Mark alert as sent
+void Alert::markAlertSent() {
+  alertSent = true;
+  lastAlertTime = millis();
+  alertDowntimeStart = firstFailureTime > 0 ? firstFailureTime : millis();
+  isActive = true;
+  Serial.printf("[ALERT] %s: Alert marked as sent\n", targetName.c_str());
+}
+
+// Mark as recovered
+void Alert::markRecovered() {
+  failureCount = 0;
+  alertSent = false;
+  firstFailureTime = 0;
+  alertDowntimeStart = 0;
+  isActive = false;
+  lastAlertTime = millis();
+  Serial.printf("[ALERT] %s: Marked as recovered\n", targetName.c_str());
+}
+
+// Getters
+bool Alert::isAlertActive() const { return isActive; }
+String Alert::getTargetName() const { return targetName; }
+unsigned long Alert::getDowntime() const { 
+  return firstFailureTime > 0 ? (millis() - firstFailureTime) : 0; 
+}
+uint8_t Alert::getFailureCount() const { return failureCount; }
+Status Alert::getCurrentStatus() const { return currentStatus; }
+Status Alert::getLastStatus() const { return lastStatus; }
+bool Alert::hasAlertBeenSent() const { return alertSent; }
+unsigned long Alert::getLastAlertTime() const { return lastAlertTime; }
+
+// Setters
+void Alert::setTargetName(const char* name) {
+  if (name && strlen(name) > 0) {
+    targetName = String(name);
+  }
+}
+
+// Debug
+void Alert::printState() const {
+  Serial.printf("[ALERT] %s: status=%d, failures=%d, active=%s, sent=%s\n",
+               targetName.c_str(), currentStatus, failureCount,
+               isActive ? "true" : "false", alertSent ? "true" : "false");
+}
+
+// ===== IMPLEMENTAÇÃO DA CLASSE TELEGRAMALERTS =====
+
 // Inicialização dos membros estáticos
 bool TelegramAlerts::isEnabled = false;
 String TelegramAlerts::botToken = "";
 String TelegramAlerts::chatId = "";
-AlertState TelegramAlerts::alertStates[6];
+Alert* TelegramAlerts::alerts[6] = {nullptr};
 bool TelegramAlerts::sendingMessage = false;
 
 bool TelegramAlerts::begin() {
@@ -35,14 +158,12 @@ bool TelegramAlerts::begin() {
   chatId = String(TELEGRAM_CHAT_ID);
   isEnabled = true;
   
-  // Inicializar estados de alerta
+  // Inicializar objetos Alert encapsulados
   for (int i = 0; i < 6; i++) {
-    alertStates[i].failure_count = 0;
-    alertStates[i].last_status = UNKNOWN;
-    alertStates[i].last_alert = 0;
-    alertStates[i].alert_sent = false;
-    alertStates[i].downtime_start = 0;
-    alertStates[i].alert_downtime_start = 0;
+    if (alerts[i]) {
+      delete alerts[i];
+    }
+    alerts[i] = new Alert(i, "Target");
   }
   
   Serial.println("[TELEGRAM] Alerts system initialized successfully!");
@@ -56,112 +177,37 @@ bool TelegramAlerts::begin() {
 
 // Funções removidas: end(), setBotToken(), setChatId(), enable() - não utilizadas
 
-void TelegramAlerts::updateTargetStatus(int targetIndex, Status newStatus, uint16_t latency) {
-  if (!isActive() || targetIndex < 0 || targetIndex >= 6) {
+void TelegramAlerts::updateTargetStatus(int targetIndex, Status newStatus, uint16_t latency, const char* targetName) {
+  if (!isActive() || targetIndex < 0 || targetIndex >= 6 || !alerts[targetIndex]) {
     Serial.printf("[TELEGRAM] updateTargetStatus: not active or invalid index (targetIndex=%d, isActive=%s)\n", 
                  targetIndex, isActive() ? "true" : "false");
     return;
   }
   
-  AlertState& state = alertStates[targetIndex];
-  unsigned long now = millis();
+  Alert* alert = alerts[targetIndex];
   
-  DEBUG_LOGF("[TELEGRAM] updateTargetStatus: targetIndex=%d, newStatus=%d, latency=%d, lastStatus=%d, failureCount=%d\n", 
-               targetIndex, newStatus, latency, state.last_status, state.failure_count);
+  // Update target name if provided
+  alert->setTargetName(targetName);
   
-  // Verificar mudança de status
-  if (state.last_status != newStatus) {
-    DEBUG_LOGF("[TELEGRAM] Status mudou de %d para %d\n", state.last_status, newStatus);
-    
-    if (newStatus == DOWN) {
-      // Status mudou para DOWN
-      state.failure_count++;
-      
-      // Marcar início do downtime se é a primeira falha
-      if (state.failure_count == 1) {
-        state.downtime_start = now;
-        Serial.printf("[TELEGRAM] Target %d: Downtime started\n", targetIndex);
-      }
-      
-      Serial.printf("[TELEGRAM] Target %d: Failure #%d\n", targetIndex, state.failure_count);
-      
-      // Enviar alerta se atingiu o limite
-      if (state.failure_count >= MAX_FAILURES_BEFORE_ALERT && isTimeForAlert(targetIndex)) {
-        Serial.printf("[TELEGRAM] Sending alert for target %d (failures: %d)\n", targetIndex, state.failure_count);
-        // Marcar início do downtime de alerta ANTES de enviar a mensagem (para o DOWN incluir duração)
-        if (state.alert_downtime_start == 0) {
-          state.alert_downtime_start = state.downtime_start > 0 ? state.downtime_start : now;
-          Serial.printf("[TELEGRAM] Target %d: alert_downtime_start=%lu (pre-ALERT)\n", targetIndex, state.alert_downtime_start);
-        }
-        sendAlert(targetIndex, "Target", newStatus, latency);
-        state.last_alert = now;
-        state.alert_sent = true;
-      } else {
-        Serial.printf("[TELEGRAM] Not time to alert yet (failures: %d, limit: %d)\n", 
-                     state.failure_count, MAX_FAILURES_BEFORE_ALERT);
-      }
-    } else if (newStatus == UP && state.last_status == DOWN) {
-      // Recuperação: status mudou de DOWN para UP
-      Serial.printf("[TELEGRAM] Recovery detected for target %d\n", targetIndex);
-      bool hadOutage = state.downtime_start > 0;
-      bool canRecover = isTimeForAlert(targetIndex, true);
-      Serial.printf("[TELEGRAM] Recovery check: alert_sent=%s, hadOutage=%s, canRecover=%s, last_alert=%lu, downtime_start=%lu\n",
-                    state.alert_sent ? "true" : "false",
-                    hadOutage ? "true" : "false",
-                    canRecover ? "true" : "false",
-                    state.last_alert,
-                    state.downtime_start);
-      // Enviar recuperação SOMENTE se houve alerta DOWN prévio (usa alert_downtime_start)
-      if (state.alert_sent && state.alert_downtime_start > 0 && canRecover) {
-        sendRecoveryAlert(targetIndex, "Target", latency);
-        state.last_alert = now;
-        // Reset somente após enviar recovery
-        state.failure_count = 0;
-        state.alert_sent = false;
-        state.downtime_start = 0;  // Reset downtime tracking
-        state.alert_downtime_start = 0; // Reset downtime tracking do alerta
-      } else {
-        Serial.println("[TELEGRAM] Recovery NOT sent (waiting for cooldown or no downtime recorded)");
-      }
-    }
-    // Atualizar last_status após tratar a mudança
-    state.last_status = newStatus;
-  // Se status permaneceu UP, verificar se há recovery pendente (por cooldown) e tentar enviar
-  } else if (newStatus == UP) {
-    if (state.alert_sent && state.alert_downtime_start > 0 && isTimeForAlert(targetIndex, true)) {
-      Serial.printf("[TELEGRAM] Pending recovery: sending now (target %d)\n", targetIndex);
-      sendRecoveryAlert(targetIndex, "Target", latency);
-      state.last_alert = now;
-      state.failure_count = 0;
-      state.alert_sent = false;
-      state.downtime_start = 0;
-      state.alert_downtime_start = 0;
-    }
-    
-    state.last_status = newStatus;
-  } else if (newStatus == DOWN) {
-    // Status continua DOWN, incrementar contador
-    state.failure_count++;
-    Serial.printf("[TELEGRAM] Target %d: Continuous failure #%d\n", targetIndex, state.failure_count);
-    
-      // Verificar se deve enviar alerta
-  Serial.printf("[TELEGRAM] Checking alert: failures=%d, limit=%d, isTimeForAlert=%s\n", 
-               state.failure_count, MAX_FAILURES_BEFORE_ALERT, isTimeForAlert(targetIndex) ? "true" : "false");
+  DEBUG_LOGF("[TELEGRAM] updateTargetStatus: targetIndex=%d, newStatus=%d, latency=%d, targetName=%s\n", 
+               targetIndex, newStatus, latency, alert->getTargetName().c_str());
   
-  if (state.failure_count >= MAX_FAILURES_BEFORE_ALERT && isTimeForAlert(targetIndex)) {
-    // Garantir início do downtime de alerta também no caminho contínuo
-    if (state.alert_downtime_start == 0) {
-      state.alert_downtime_start = state.downtime_start > 0 ? state.downtime_start : now;
-      Serial.printf("[TELEGRAM] Target %d: alert_downtime_start=%lu (continuous)\n", targetIndex, state.alert_downtime_start);
-    }
-    Serial.printf("[TELEGRAM] Sending alert for target %d (continuous failures: %d)\n", targetIndex, state.failure_count);
-    sendAlert(targetIndex, "Target", newStatus, latency);
-    state.last_alert = now;
-    state.alert_sent = true;
-  } else {
-    Serial.printf("[TELEGRAM] Alert NOT sent: failures=%d, limit=%d, isTimeForAlert=%s\n", 
-                 state.failure_count, MAX_FAILURES_BEFORE_ALERT, isTimeForAlert(targetIndex) ? "true" : "false");
+  // Update alert status using encapsulated logic
+  alert->updateStatus(newStatus, latency);
+  
+  // Check if should send alert
+  if (alert->shouldSendAlert()) {
+    Serial.printf("[TELEGRAM] Sending alert for %s (failures: %d)\n", 
+                 alert->getTargetName().c_str(), alert->getFailureCount());
+    sendAlert(targetIndex, alert->getTargetName().c_str(), newStatus, latency);
+    alert->markAlertSent();
   }
+  
+  // Check if should send recovery
+  if (alert->shouldSendRecovery()) {
+    Serial.printf("[TELEGRAM] Sending recovery alert for %s\n", alert->getTargetName().c_str());
+    sendRecoveryAlert(targetIndex, alert->getTargetName().c_str(), latency);
+    alert->markRecovered();
   }
 }
 
@@ -179,10 +225,10 @@ void TelegramAlerts::sendAlert(int targetIndex, const char* targetName, Status s
     realTargetName = targetNames[targetIndex];
   }
   
-  // Calcular downtime atual (em segundos) baseado em alert_downtime_start se disponível
+  // Calcular downtime atual (em segundos) baseado no alerta encapsulado
   unsigned long currentDowntime = 0;
-  if (targetIndex >= 0 && targetIndex < 6 && alertStates[targetIndex].alert_downtime_start > 0) {
-    currentDowntime = (millis() - alertStates[targetIndex].alert_downtime_start) / 1000;
+  if (targetIndex >= 0 && targetIndex < 6 && alerts[targetIndex]) {
+    currentDowntime = alerts[targetIndex]->getDowntime() / 1000;
   }
 
   String message = formatAlertMessage(realTargetName, status, latency, false, currentDowntime);
@@ -209,10 +255,10 @@ void TelegramAlerts::sendRecoveryAlert(int targetIndex, const char* targetName, 
     realTargetName = targetNames[targetIndex];
   }
   
-  // Calcular tempo total de downtime com base em alert_downtime_start
+  // Calcular tempo total de downtime com base no alerta encapsulado
   unsigned long totalDowntime = 0;
-  if (targetIndex >= 0 && targetIndex < 6 && alertStates[targetIndex].alert_downtime_start > 0) {
-    totalDowntime = (millis() - alertStates[targetIndex].alert_downtime_start) / 1000;
+  if (targetIndex >= 0 && targetIndex < 6 && alerts[targetIndex]) {
+    totalDowntime = alerts[targetIndex]->getDowntime() / 1000;
   }
   
   String message = formatAlertMessage(realTargetName, UP, latency, true, totalDowntime);
@@ -339,17 +385,17 @@ bool TelegramAlerts::isHealthCheckHealthy(const String& response) {
 bool TelegramAlerts::isTimeForAlert(int targetIndex, bool isRecovery) {
   if (targetIndex < 0 || targetIndex >= 6) return false;
   
-  AlertState& state = alertStates[targetIndex];
+  Alert* alert = alerts[targetIndex];
   unsigned long now = millis();
   unsigned long cooldown = isRecovery ? ALERT_RECOVERY_COOLDOWN_MS : ALERT_COOLDOWN_MS;
   
   // Evitar enviar recovery como primeiro alerta (ex.: logo após o boot)
-  if (isRecovery && state.last_alert == 0) {
+  if (isRecovery && alert->getLastAlertTime() == 0) {
     Serial.printf("[TELEGRAM] isTimeForAlert: targetIndex=%d, RECOVERY BLOCKED (first alert)\n", targetIndex);
     return false;
   }
   // Se nunca enviou alerta (last_alert = 0), pode enviar (somente para ALERT)
-  if (state.last_alert == 0) {
+  if (alert->getLastAlertTime() == 0) {
     Serial.printf("[TELEGRAM] isTimeForAlert: targetIndex=%d, FIRST ALERT (last_alert=0)\n", targetIndex);
     return true;
   }
@@ -360,10 +406,10 @@ bool TelegramAlerts::isTimeForAlert(int targetIndex, bool isRecovery) {
     return true;
   }
   
-  unsigned long timeSinceLastAlert = now - state.last_alert;
+  unsigned long timeSinceLastAlert = now - alert->getLastAlertTime();
   
   Serial.printf("[TELEGRAM] isTimeForAlert: targetIndex=%d, isRecovery=%s, last_alert=%lu, now=%lu, timeSince=%lu, cooldown=%lu\n", 
-               targetIndex, isRecovery ? "true" : "false", state.last_alert, now, timeSinceLastAlert, cooldown);
+               targetIndex, isRecovery ? "true" : "false", alert->getLastAlertTime(), now, timeSinceLastAlert, cooldown);
   
   bool canAlert = (timeSinceLastAlert) >= cooldown;
   Serial.printf("[TELEGRAM] isTimeForAlert result: %s\n", canAlert ? "true" : "false");
@@ -372,8 +418,8 @@ bool TelegramAlerts::isTimeForAlert(int targetIndex, bool isRecovery) {
 }
 
 int TelegramAlerts::getFailureCount(int targetIndex) {
-  if (targetIndex < 0 || targetIndex >= 6) return 0;
-  return alertStates[targetIndex].failure_count;
+  if (targetIndex < 0 || targetIndex >= 6 || !alerts[targetIndex]) return 0;
+  return alerts[targetIndex]->getFailureCount();
 }
 
 // Função removida: resetFailureCount() - não utilizada
@@ -383,7 +429,7 @@ bool TelegramAlerts::hasActiveAlerts() {
   
   // Verificar se há pelo menos um target com alerta ativo
   for (int i = 0; i < 6; i++) {
-    if (alertStates[i].alert_sent) {
+    if (alerts[i] && alerts[i]->isAlertActive()) {
       return true; // Há pelo menos um alerta ativo
     }
   }
@@ -395,8 +441,8 @@ bool initTelegramAlerts() {
   return TelegramAlerts::begin();
 }
 
-void updateTelegramAlert(int targetIndex, Status status, uint16_t latency) {
-  TelegramAlerts::updateTargetStatus(targetIndex, status, latency);
+void updateTelegramAlert(int targetIndex, Status status, uint16_t latency, const char* targetName) {
+  TelegramAlerts::updateTargetStatus(targetIndex, status, latency, targetName);
 }
 
 void sendTestTelegramAlert(Target* targets, int targetCount) {
