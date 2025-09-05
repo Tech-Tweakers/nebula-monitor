@@ -72,18 +72,30 @@ String HttpClient::post(const String& url, const String& data, uint16_t timeout)
 bool HttpClient::isHealthyResponse(const String& response) const {
   if (response.length() == 0) return false;
   
-  // Check for common health indicators
-  if (response.indexOf("\"status\":\"healthy\"") > 0) {
-    return true;
-  }
-  
+  // Check for explicit unhealthy indicators first
   if (response.indexOf("\"status\":\"unhealthy\"") > 0 || 
-      response.indexOf("\"status\":\"down\"") > 0) {
+      response.indexOf("\"status\":\"down\"") > 0 ||
+      response.indexOf("502 Bad Gateway") > 0 ||
+      response.indexOf("503 Service Unavailable") > 0 ||
+      response.indexOf("504 Gateway Timeout") > 0) {
     return false;
   }
   
-  // If no specific health status found, consider any response as healthy
-  return true;
+  // Check for explicit healthy indicators
+  if (response.indexOf("\"status\":\"healthy\"") > 0 ||
+      response.indexOf("\"status\":\"ok\"") > 0 ||
+      response.indexOf("\"health\":\"ok\"") > 0) {
+    return true;
+  }
+  
+  // For responses without explicit health indicators, 
+  // only consider healthy if it's a short response (likely a simple OK)
+  if (response.length() < 100) {
+    return true;
+  }
+  
+  // For longer responses without health indicators, consider unhealthy
+  return false;
 }
 
 void HttpClient::setUserAgent(const String& userAgent) {

@@ -219,22 +219,32 @@ uint16_t NetworkMonitor::performSafeHealthCheck(const String& url) {
   uint16_t latency = httpClient->healthCheck(safeUrl, "", 10000); // 10 second timeout
   
   if (latency > 0) {
-    Serial.printf("[NETWORK_MONITOR] Health check successful: %d ms\n", latency);
-    
-    // Get the response payload for additional verification
+    // Get the response payload for verification
     String response = httpClient->getLastResponse();
     if (response.length() > 0 && response.length() < 1000) {
       Serial.printf("[NETWORK_MONITOR] Response payload: %s\n", response.c_str());
       
-      // Check for specific health indicators in the response
+      // Check if response indicates unhealthy status
+      if (response.indexOf("502 Bad Gateway") > 0 ||
+          response.indexOf("503 Service Unavailable") > 0 ||
+          response.indexOf("504 Gateway Timeout") > 0) {
+        Serial.println("[NETWORK_MONITOR] Health check FAILED: Server error detected");
+        return 0; // Return 0 to indicate DOWN
+      }
+      
+      // Check for explicit healthy indicators
       if (response.indexOf("\"status\":\"healthy\"") > 0 || 
           response.indexOf("\"health\":\"ok\"") > 0 ||
           response.indexOf("\"status\":\"ok\"") > 0) {
         Serial.println("[NETWORK_MONITOR] Health status confirmed: healthy");
+      } else if (response.length() < 100) {
+        Serial.println("[NETWORK_MONITOR] Health status: short response, likely OK");
       } else {
         Serial.println("[NETWORK_MONITOR] Health status: response received but not explicitly healthy");
+        return 0; // Return 0 to indicate DOWN for ambiguous responses
       }
     }
+    Serial.printf("[NETWORK_MONITOR] Health check successful: %d ms\n", latency);
   } else {
     Serial.println("[NETWORK_MONITOR] Health check failed: No response");
   }
