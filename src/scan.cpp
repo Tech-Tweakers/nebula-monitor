@@ -42,7 +42,7 @@ bool ScanManager::begin(const Target* targetArray, int count) {
     scanResults[i].lat_ms = 0;
   }
   
-  Serial.printf("[SCAN] Scan Manager inicializado com %d targets\n", count);
+  Serial.printf("[SCAN] Scan Manager initialized with %d targets\n", count);
   return true;
 }
 
@@ -96,11 +96,11 @@ void ScanManager::update() {
       // Escolher tipo de verificação baseado na configuração
       if (targets[i].monitor_type == HEALTH_CHECK) {
         // Health check via API endpoint
-        Serial.printf("[SCAN] Fazendo health check para %s...\n", targets[i].name);
+        Serial.printf("[SCAN] Performing health check for %s...\n", targets[i].name);
         latency = healthCheckTarget(targets[i].url, targets[i].health_endpoint);
       } else {
         // Ping simples
-        Serial.printf("[SCAN] Fazendo ping para %s...\n", targets[i].name);
+        Serial.printf("[SCAN] Performing ping for %s...\n", targets[i].name);
         latency = pingTarget(targets[i].url);
       }
       
@@ -185,7 +185,7 @@ uint16_t ScanManager::healthCheckTarget(const char* base_url, const char* health
   }
   full_url += health_endpoint;
   
-  Serial.printf("[HEALTH] Verificando health endpoint: %s\n", full_url.c_str());
+  Serial.printf("[HEALTH] Checking health endpoint: %s\n", full_url.c_str());
   
   // Para endpoints ngrok, tentar com timeout maior e retry
   uint16_t timeout = 7000;
@@ -198,12 +198,12 @@ uint16_t ScanManager::healthCheckTarget(const char* base_url, const char* health
   
   // Se falhou e é ngrok, tentar HTTP como fallback
   if (latency == 0 && strstr(base_url, "ngrok-free.app")) {
-    Serial.printf("[HEALTH] HTTPS falhou, tentando HTTP como fallback...\n");
+    Serial.printf("[HEALTH] HTTPS failed, trying HTTP as fallback...\n");
     String http_url = full_url;
     http_url.replace("https://", "http://");
     latency = Net::httpPing(http_url.c_str(), timeout);
     if (latency > 0) {
-      Serial.printf("[HEALTH] HTTP fallback funcionou: %d ms\n", latency);
+      Serial.printf("[HEALTH] HTTP fallback worked: %d ms\n", latency);
     }
   }
   
