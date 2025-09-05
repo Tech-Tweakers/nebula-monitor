@@ -12,19 +12,19 @@ static bool lastTouchState = false;
 static uint32_t lastTouchTime = 0;
 
 bool Touch::beginHSPI() {
-  Serial.println("[TOUCH] Inicializando touchscreen HSPI...");
+  Serial.println("[TOUCH] Initializing touchscreen HSPI...");
   
   // Create SPI instance for touchscreen (HSPI)
   touchscreenSPI = new SPIClass(HSPI);
   if (!touchscreenSPI) {
-    Serial.println("[TOUCH] ERRO: Falha ao criar SPI!");
+    Serial.println("[TOUCH] ERROR: Failed to create SPI!");
     return false;
   }
   
   // Create touchscreen instance
   touchscreen = new XPT2046_Touchscreen(T_CS, T_IRQ);
   if (!touchscreen) {
-    Serial.println("[TOUCH] ERRO: Falha ao criar touchscreen!");
+    Serial.println("[TOUCH] ERROR: Failed to create touchscreen!");
     return false;
   }
   
@@ -35,9 +35,9 @@ bool Touch::beginHSPI() {
   touchscreen->begin(*touchscreenSPI);
   touchscreen->setRotation(ROT);
   
-  Serial.printf("[TOUCH] Touchscreen inicializado - CS:%d IRQ:%d MISO:%d MOSI:%d (HSPI)\n", 
+  Serial.printf("[TOUCH] Touchscreen initialized - CS:%d IRQ:%d MISO:%d MOSI:%d (HSPI)\n", 
                 T_CS, T_IRQ, T_MISO, T_MOSI);
-  Serial.println("[TOUCH] Configuração otimizada para máxima sensibilidade!");
+  Serial.println("[TOUCH] Configuration optimized for maximum sensitivity!");
   
   return true;
 }
