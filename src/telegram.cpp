@@ -407,12 +407,11 @@ void sendTestTelegramAlert(Target* targets, int targetCount) {
     message += "⏰ *Cooldown:* " + String(ALERT_COOLDOWN_MS / 1000) + "s\n\n";
     
     // List all targets being monitored
-    message += "🎯 *Targets:* ";
+    message += "🎯 *Targets:*\n";
     for (int i = 0; i < targetCount; i++) {
-      if (i > 0) message += ", ";
-      message += String(targets[i].name);
+      message += "• " + String(targets[i].name) + "\n";
     }
-    message += "\n\n";
+    message += "\n";
     
     message += "_Tech Tweakers - 2025_";
     
