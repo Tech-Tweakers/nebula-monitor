@@ -11,14 +11,14 @@ unsigned long NTPManager::lastSyncTime = 0;
 bool NTPManager::begin() {
     if (initialized) return true;
     
-    Serial.println("[NTP] Inicializando NTP Manager...");
+    Serial.println("[NTP] Init NTP Manager...");
     
     // Configurar servidor NTP (pool.ntp.org é mais confiável)
     timeClient.setTimeOffset(getTimezoneOffset());
     timeClient.setUpdateInterval(SYNC_INTERVAL);
     
     initialized = true;
-    Serial.println("[NTP] NTP Manager inicializado!");
+    Serial.println("[NTP] NTP Manager started!");
     
     return true;
 }
@@ -28,22 +28,22 @@ void NTPManager::end() {
         timeClient.end();
         initialized = false;
         timeSynced = false;
-        Serial.println("[NTP] NTP Manager finalizado");
+        Serial.println("[NTP] NTP Manager finished");
     }
 }
 
 bool NTPManager::syncTime() {
     if (!initialized) {
-        Serial.println("[NTP] ERRO: NTP Manager não inicializado!");
+        Serial.println("[NTP] ERROR: NTP Manager not started!");
         return false;
     }
     
     if (WiFi.status() != WL_CONNECTED) {
-        Serial.println("[NTP] ERRO: WiFi não conectado!");
+        Serial.println("[NTP] ERROR: WiFi failed!");
         return false;
     }
     
-    Serial.println("[NTP] Sincronizando com servidor NTP...");
+    Serial.println("[NTP] Sync with NTP server...");
     
     // Tentar sincronizar
     if (timeClient.forceUpdate()) {
@@ -53,11 +53,11 @@ bool NTPManager::syncTime() {
         // Configurar timezone do sistema
         setTimezone(getTimezoneOffset());
         
-        Serial.printf("[NTP] Sincronização bem-sucedida! Hora atual: %s\n", 
+        Serial.printf("[NTP] Synced! Actual time: %s\n", 
                      formatTime(getCurrentTime()).c_str());
         return true;
     } else {
-        Serial.println("[NTP] ERRO: Falha na sincronização NTP!");
+        Serial.println("[NTP] ERROR: Failed to sync NTP!");
         return false;
     }
 }
@@ -128,5 +128,5 @@ int NTPManager::getTimezoneOffset() {
 void NTPManager::setTimezone(int offsetSeconds) {
     // Configurar timezone do sistema ESP32
     configTime(offsetSeconds, 0, "pool.ntp.org");
-    Serial.printf("[NTP] Timezone configurado: %d segundos\n", offsetSeconds);
+    Serial.printf("[NTP] Timezone configured: %d seconds\n", offsetSeconds);
 }
