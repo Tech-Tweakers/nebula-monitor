@@ -67,16 +67,16 @@ inline void updateStatusLed() {
   bool hasActiveAlerts = TelegramAlerts::hasActiveAlerts();
 
   if (isTelegramSending) {
-    // Blue (invertido: usar vermelho)
+    // Red LED: Telegram sending
     setStatusLed(true, false, false);
   } else if (isScanning) {
-    // Blue (invertido: usar vermelho)
+    // Red LED: Scanning in progress
     setStatusLed(true, false, false);
   } else if (hasActiveAlerts) {
-    // Red (invertido: usar azul)
+    // Blue LED: Active alerts (targets down)
     setStatusLed(false, false, true);
   } else {
-    // Green (idle/ok)
+    // Green LED: System idle/OK
     setStatusLed(false, true, false);
   }
 }
@@ -184,8 +184,7 @@ static bool footer_show_network = true; // Toggle state for footer
 static int footer_mode = 0; // Footer mode: 0=System, 1=Network, 2=Performance, 3=Targets, 4=Uptime
 static lv_obj_t* footer_line2_ref = nullptr; // Global reference for footer line 2
 
-// Telegram chat ID discovery variables
-
+// Telegram system initialization status
 static bool telegram_initialized = false;
 
 // Footer long press variables
@@ -223,10 +222,10 @@ void showDetailWindow(int target_index) {
 
 }
 
-// (Removed) scan status indicator
+// Scan status is now handled by LED system and footer updates
 
 // ------------------------
-// Inter-task communication
+// Inter-task communication (FreeRTOS)
 // ------------------------
 enum ScanEventType { EV_SCAN_START, EV_SCAN_COMPLETE, EV_TARGET_UPDATE };
 struct ScanEvent {
@@ -353,7 +352,7 @@ void footer_click_cb(lv_event_t* e) {
 }
 
 // ------------------------
-// Display/UI Task (Core 1)
+// Display/UI Task (Core 1) - LVGL operations only
 // ------------------------
 static void displayTask(void* pv) {
   for (;;) {
@@ -362,7 +361,7 @@ static void displayTask(void* pv) {
       ScanEvent ev;
       while (xQueueReceive(scan_event_queue, &ev, 0) == pdTRUE) {
         if (ev.type == EV_SCAN_START) {
-          setStatusLed(true, false, false); // RED while scanning (invertido)
+          setStatusLed(true, false, false); // Red LED: Scanning started
           updateFooterContent();
           lv_refr_now(lv_disp_get_default());
         } else if (ev.type == EV_SCAN_COMPLETE) {
@@ -396,9 +395,9 @@ static void displayTask(void* pv) {
             lv_obj_invalidate(status_labels[i]);
           }
           updateFooterContent();
-          if (anyDown) setStatusLed(false, false, true); // BLUE (invertido)
-          else if (TelegramAlerts::isSendingMessage() || ScanManager::isActive()) setStatusLed(true, false, false); // RED (invertido)
-          else setStatusLed(false, true, false); // GREEN
+          if (anyDown) setStatusLed(false, false, true); // Blue LED: Targets down
+          else if (TelegramAlerts::isSendingMessage() || ScanManager::isActive()) setStatusLed(true, false, false); // Red LED: Telegram/Scanning
+          else setStatusLed(false, true, false); // Green LED: System OK
           lv_refr_now(lv_disp_get_default());
           last_scan_time = millis();
         } else if (ev.type == EV_TARGET_UPDATE) {
@@ -432,9 +431,9 @@ static void displayTask(void* pv) {
             for (int i = 0; i < N_TARGETS; i++) {
               if (ScanManager::getTargetStatus(i) == DOWN) { anyDown = true; break; }
             }
-            if (anyDown) setStatusLed(false, false, true);
-            else if (TelegramAlerts::isSendingMessage() || ScanManager::isActive()) setStatusLed(true, false, false);
-            else setStatusLed(false, true, false);
+            if (anyDown) setStatusLed(false, false, true); // Blue LED: Targets down
+            else if (TelegramAlerts::isSendingMessage() || ScanManager::isActive()) setStatusLed(true, false, false); // Red LED: Telegram/Scanning
+            else setStatusLed(false, true, false); // Green LED: System OK
 
             lv_refr_now(lv_disp_get_default());
           }
@@ -448,24 +447,24 @@ static void displayTask(void* pv) {
     // Small delay to give touch more processing time
     vTaskDelay(pdMS_TO_TICKS(10));
 
-    // Wi-Fi fail-safe: blink RED when disconnected (highest priority)
+    // Wi-Fi fail-safe: blink Red LED when disconnected (highest priority)
     if (WiFi.status() != WL_CONNECTED) {
       static unsigned long lastBlink = 0;
       static bool on = false;
       if (millis() - lastBlink >= 500) {
         on = !on;
         lastBlink = millis();
-        setStatusLed(on, false, false);
+        setStatusLed(on, false, false); // Red LED: WiFi disconnected
       }
     } else {
-      // Real-time LED priority while in loop: DOWN -> RED, else TELEGRAM/SCAN -> BLUE, else GREEN
+      // Real-time LED priority: Targets down -> Blue, Telegram/Scan -> Red, else Green
       bool anyDownRealtime = false;
       for (int i = 0; i < N_TARGETS; i++) {
         if (ScanManager::getTargetStatus(i) == DOWN) { anyDownRealtime = true; break; }
       }
-      if (anyDownRealtime) setStatusLed(false, false, true);
-      else if (TelegramAlerts::isSendingMessage() || ScanManager::isActive()) setStatusLed(true, false, false);
-      else setStatusLed(false, true, false);
+      if (anyDownRealtime) setStatusLed(false, false, true); // Blue LED: Targets down
+      else if (TelegramAlerts::isSendingMessage() || ScanManager::isActive()) setStatusLed(true, false, false); // Red LED: Telegram/Scanning
+      else setStatusLed(false, true, false); // Green LED: System OK
     }
 
     // Periodic footer updates
@@ -541,7 +540,7 @@ static void displayTask(void* pv) {
         }
       }
 
-      // (detail window already handled above)
+      // Detail window touch handling already processed above
 
       for (int i = 0; i < N_TARGETS; i++) {
         lv_area_t area;
@@ -559,7 +558,7 @@ static void displayTask(void* pv) {
 }
 
 // ------------------------
-// Scanner Task (Core 0)
+// Scanner Task (Core 0) - Network operations only
 // ------------------------
 static void scannerTask(void* pv) {
   for (;;) {
@@ -634,8 +633,8 @@ void setup() {
     Serial.println("[MAIN] NTP inicializado com sucesso!");
   }
   
-  // ===== ALVENARIA DE SOFTWARE =====
-  // Agora que temos WiFi e NTP, podemos usar SDConfigManager
+  // ===== CONFIGURATION MANAGEMENT =====
+  // Initialize SDConfigManager after WiFi and NTP are ready
   Serial.println("[MAIN] Inicializando SDConfigManager...");
   if (!SDConfigManager::begin()) {
     Serial.println("[MAIN] ERRO: Falha ao inicializar SDConfigManager!");
@@ -761,7 +760,7 @@ void setup() {
   lv_obj_set_style_text_font(title_label, LV_FONT_DEFAULT, LV_PART_MAIN);
   lv_obj_center(title_label);
 
-  // No more buttons - clean interface with just the list!
+  // Clean interface design - no buttons, just status list
   Serial.println("[MAIN] Interface limpa - sem botões, só lista!");
 
   // Create main form container with flex layout - increased height
