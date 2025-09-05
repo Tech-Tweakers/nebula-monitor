@@ -15,9 +15,9 @@
 #include "freertos/task.h"
 #include "freertos/queue.h"
 
-// Network targets - serão carregados dinamicamente do config.env
-static Target targets[10]; // Array dinâmico para targets
-static int N_TARGETS = 0;  // Número de targets carregados
+// Network targets - will be loaded dynamically from config.env
+static Target targets[10]; // Dynamic array for targets
+static int N_TARGETS = 0;  // Number of loaded targets
 
 // RGB System Status LED config (runtime from ConfigManager)
 static int LED_PIN_R;
@@ -81,17 +81,17 @@ inline void updateStatusLed() {
   }
 }
 
-// Função para carregar targets do ConfigManager
+// Function to load targets from ConfigManager
 void loadTargetsFromConfig() {
   N_TARGETS = ConfigManager::getTargetCount();
   Serial.printf("[MAIN] Carregando %d targets do config.env\n", N_TARGETS);
   
-  // Verificação de segurança - se não há targets, usar valores padrão
+  // Safety check - if no targets found, use default values
   if (N_TARGETS == 0) {
     Serial.println("[MAIN] AVISO: Nenhum target encontrado no config.env, usando valores padrão!");
-    N_TARGETS = 6; // Usar 6 targets padrão
+    N_TARGETS = 6; // Use 6 default targets
     
-    // Targets padrão hardcoded como fallback
+    // Default targets hardcoded as fallback
     const char* defaultTargets[][4] = {
       {"Proxmox HV", "http://192.168.1.128:8006/", "", "PING"},
       {"Router #1", "http://192.168.1.1", "", "PING"},
@@ -588,17 +588,17 @@ void setup() {
   Serial.begin(115200);
   LOGLN("[MAIN] Iniciando Nebula Monitor v2.3...");
   
-  // Inicializar ConfigManager (lê do SPIFFS - sem NTP ainda)
+  // Initialize ConfigManager (reads from SPIFFS - no NTP yet)
   Serial.println("[MAIN] Inicializando ConfigManager...");
   if (!ConfigManager::begin()) {
     Serial.println("[MAIN] ERRO: Falha ao inicializar ConfigManager!");
     Serial.println("[MAIN] Continuando com valores padrão...");
-    // Continue com valores padrão
+    // Continue with default values
   } else {
     Serial.println("[MAIN] ConfigManager inicializado com sucesso!");
     ConfigManager::printAllConfigs();
     
-    // Inicializar variáveis de debug
+    // Initialize debug variables
     DEBUG_LOGS_ENABLED = ConfigManager::isDebugLogsEnabled();
     TOUCH_LOGS_ENABLED = ConfigManager::isTouchLogsEnabled();
     ALL_LOGS_ENABLED = ConfigManager::isAllLogsEnabled();
@@ -730,7 +730,7 @@ void setup() {
   if (initTelegramAlerts()) {
     LOGLN("[MAIN] Sistema de alertas Telegram inicializado!");
     telegram_initialized = true;
-    // Enviar mensagem de inicialização
+    // Send initialization message
     delay(2000); // Aguardar um pouco
     sendTestTelegramAlert();
   } else {
@@ -743,7 +743,7 @@ void setup() {
 
   // Initialize LVGL screen
   main_screen = lv_scr_act();
-  lv_obj_set_style_bg_color(main_screen, lv_color_hex(0x000000), LV_PART_MAIN); // Preto → aparecerá branco
+  lv_obj_set_style_bg_color(main_screen, lv_color_hex(0x000000), LV_PART_MAIN); // Black background
 
   // Create title bar
   lv_obj_t* title_bar = lv_obj_create(main_screen);
