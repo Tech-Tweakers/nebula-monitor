@@ -465,7 +465,7 @@ static void displayTask(void* pv) {
         } else if (ev.type == EV_TARGET_UPDATE) {
           int idx = ev.index;
           if (idx >= 0 && idx < N_TARGETS) {
-            updateTelegramAlert(idx, ev.status, ev.latency_ms);
+            updateTelegramAlert(idx, ev.status, ev.latency_ms, targets[idx].name);
             if (ev.status == UP && ev.latency_ms > 0) {
               char latency_text[30];
               const char* type_text = targets[idx].monitor_type == HEALTH_CHECK ? "OK" : "ms";
