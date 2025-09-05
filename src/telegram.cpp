@@ -102,29 +102,34 @@ void TelegramAlerts::updateTargetStatus(int targetIndex, Status newStatus, uint1
   } else if (newStatus == UP) {
     // Target is up - check for recovery
     if (state.last_status == DOWN) {
-      // Recovery detected: status changed from DOWN to UP
-      Serial.printf("[TELEGRAM] Recovery detected for target %d\n", targetIndex);
+      // Recovery detected: status changed from DOWN to UP for THIS specific target
+      Serial.printf("[TELEGRAM] Recovery detected for target %d (%s)\n", targetIndex, targetName ? targetName : "Unknown");
       
+      // Only send recovery if THIS target had an alert sent
       if (state.alert_sent && state.alert_downtime_start > 0 && isTimeForAlert(targetIndex, true)) {
-        Serial.printf("[TELEGRAM] Sending recovery alert for target %d\n", targetIndex);
+        Serial.printf("[TELEGRAM] Sending recovery alert for target %d (%s)\n", targetIndex, targetName ? targetName : "Unknown");
         sendRecoveryAlert(targetIndex, targetName ? targetName : "Target", latency);
         state.last_alert = now;
         
-        // Reset all state after successful recovery
+        // Reset all state after successful recovery for THIS target
         state.failure_count = 0;
         state.alert_sent = false;
         state.downtime_start = 0;
         state.alert_downtime_start = 0;
       } else {
-        Serial.println("[TELEGRAM] Recovery NOT sent (waiting for cooldown or no downtime recorded)");
+        Serial.printf("[TELEGRAM] Recovery NOT sent for target %d (alert_sent=%s, downtime_start=%lu, canRecover=%s)\n", 
+                     targetIndex, 
+                     state.alert_sent ? "true" : "false",
+                     state.alert_downtime_start,
+                     isTimeForAlert(targetIndex, true) ? "true" : "false");
       }
     } else if (state.alert_sent && state.alert_downtime_start > 0 && isTimeForAlert(targetIndex, true)) {
-      // Pending recovery: try to send now (cooldown expired)
-      Serial.printf("[TELEGRAM] Pending recovery: sending now (target %d)\n", targetIndex);
+      // Pending recovery: try to send now (cooldown expired) for THIS specific target
+      Serial.printf("[TELEGRAM] Pending recovery: sending now for target %d (%s)\n", targetIndex, targetName ? targetName : "Unknown");
       sendRecoveryAlert(targetIndex, targetName ? targetName : "Target", latency);
       state.last_alert = now;
       
-      // Reset all state after successful recovery
+      // Reset all state after successful recovery for THIS target
       state.failure_count = 0;
       state.alert_sent = false;
       state.downtime_start = 0;
