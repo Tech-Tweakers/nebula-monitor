@@ -20,39 +20,39 @@ static lv_indev_drv_t indev_drv;
 static lv_indev_t* touch_indev = nullptr;
 
 bool DisplayManager::begin(uint8_t rotation, int backlight_pin) {
-  Serial.println("[DISPLAY] Inicializando Display Manager com LVGL + TFT_eSPI...");
+  Serial.println("[DISPLAY] Init Display Manager - LVGL + TFT_eSPI...");
   
   // Create TFT instance
   tft = new TFT_eSPI();
   if (!tft) {
-    Serial.println("[DISPLAY] ERRO: Falha ao criar TFT!");
+    Serial.println("[DISPLAY] ERRO: Fail to create TFT!");
     return false;
   }
   
-  Serial.println("[DISPLAY] TFT criado, inicializando...");
+  Serial.println("[DISPLAY] TFT created, starting...");
   
   // Initialize TFT
   tft->init();
-  Serial.println("[DISPLAY] TFT inicializado");
+  Serial.println("[DISPLAY] TFT started");
   
   // Set rotation
   tft->setRotation(rotation);
-  Serial.printf("[DISPLAY] Rotação definida: %d\n", rotation);
+  Serial.printf("[DISPLAY] Configured rotation: %d\n", rotation);
   
   // Set brightness (if backlight pin is provided)
   if (backlight_pin >= 0) {
     pinMode(backlight_pin, OUTPUT);
     digitalWrite(backlight_pin, HIGH);
-    Serial.printf("[DISPLAY] Backlight pin %d ativado\n", backlight_pin);
+    Serial.printf("[DISPLAY] Backlight pin %d activated\n", backlight_pin);
   }
   
   // Initialize LVGL
   lv_init();
-  Serial.println("[DISPLAY] LVGL inicializado");
+  Serial.println("[DISPLAY] LVGL started");
   
   // Initialize display buffer
   lv_disp_draw_buf_init(&draw_buf, buf1, buf2, 240 * 10);
-  Serial.println("[DISPLAY] Display buffer inicializado");
+  Serial.println("[DISPLAY] Display buffer started");
   
   // Initialize display driver
   lv_disp_drv_init(&disp_drv);
@@ -61,18 +61,18 @@ bool DisplayManager::begin(uint8_t rotation, int backlight_pin) {
   disp_drv.flush_cb = DisplayManager::flush_cb;
   disp_drv.draw_buf = &draw_buf;
   lv_disp_drv_register(&disp_drv);
-  Serial.println("[DISPLAY] Display driver registrado");
+  Serial.println("[DISPLAY] Display driver registered");
   
   // Initialize input driver for touch
   lv_indev_drv_init(&indev_drv);
   indev_drv.type = LV_INDEV_TYPE_POINTER;
   indev_drv.read_cb = DisplayManager::touch_read;
   touch_indev = lv_indev_drv_register(&indev_drv);
-  Serial.println("[DISPLAY] Input driver registrado");
+  Serial.println("[DISPLAY] Input driver registered");
   
   // Clear screen
   tft->fillScreen(TFT_BLACK);
-  Serial.println("[DISPLAY] Display Manager inicializado com sucesso!");
+  Serial.println("[DISPLAY] Display Manager successfully started!");
   
   return true;
 }
@@ -83,8 +83,6 @@ void DisplayManager::end() {
     tft = nullptr;
   }
 }
-
-// Funções removidas: clearBuffer(), setPixel(), drawRect(), fillRect(), drawText() - não utilizadas
 
 void DisplayManager::render() {
   // LVGL handles rendering
