@@ -84,11 +84,11 @@ inline void updateStatusLed() {
 // Function to load targets from ConfigManager
 void loadTargetsFromConfig() {
   N_TARGETS = ConfigManager::getTargetCount();
-  Serial.printf("[MAIN] Carregando %d targets do config.env\n", N_TARGETS);
+  Serial.printf("[MAIN] Loading %d targets from config.env\n", N_TARGETS);
   
   // Safety check - if no targets found, use default values
   if (N_TARGETS == 0) {
-    Serial.println("[MAIN] AVISO: Nenhum target encontrado no config.env, usando valores padrão!");
+    Serial.println("[MAIN] WARNING: No targets found in config.env, using default values!");
     N_TARGETS = 6; // Use 6 default targets
     
     // Default targets hardcoded as fallback
@@ -109,7 +109,7 @@ void loadTargetsFromConfig() {
       targets[i].st = UNKNOWN;
       targets[i].lat_ms = 0;
       
-      Serial.printf("[MAIN] Target padrão %d: %s | %s | %s | %s\n", 
+      Serial.printf("[MAIN] Default target %d: %s | %s | %s | %s\n", 
                    i, defaultTargets[i][0], defaultTargets[i][1], 
                    strlen(defaultTargets[i][2]) > 0 ? defaultTargets[i][2] : "null",
                    defaultTargets[i][3]);
@@ -564,12 +564,12 @@ static void scannerTask(void* pv) {
   for (;;) {
     // Check WiFi connection and reconnect if needed (keep networking on core 0)
     if (WiFi.status() != WL_CONNECTED) {
-      Serial.println("[SCAN-TASK] WiFi desconectado, tentando reconectar...");
+      Serial.println("[SCAN-TASK] WiFi disconnected, trying to reconnect...");
       if (Net::connectWiFi(WIFI_SSID, WIFI_PASS, 10000)) {
-        Serial.println("[SCAN-TASK] WiFi reconectado!");
+        Serial.println("[SCAN-TASK] WiFi reconnected!");
         Net::printInfo();
       } else {
-        Serial.println("[SCAN-TASK] Falha na reconexão WiFi");
+        Serial.println("[SCAN-TASK] WiFi reconnection failed");
       }
     }
 
@@ -586,16 +586,16 @@ static void scannerTask(void* pv) {
 
 void setup() {
   Serial.begin(115200);
-  LOGLN("[MAIN] Iniciando Nebula Monitor v2.3...");
+  LOGLN("[MAIN] Starting Nebula Monitor v2.3...");
   
   // Initialize ConfigManager (reads from SPIFFS - no NTP yet)
-  Serial.println("[MAIN] Inicializando ConfigManager...");
+  Serial.println("[MAIN] Initializing ConfigManager...");
   if (!ConfigManager::begin()) {
-    Serial.println("[MAIN] ERRO: Falha ao inicializar ConfigManager!");
-    Serial.println("[MAIN] Continuando com valores padrão...");
+    Serial.println("[MAIN] ERROR: Failed to initialize ConfigManager!");
+    Serial.println("[MAIN] Continuing with default values...");
     // Continue with default values
   } else {
-    Serial.println("[MAIN] ConfigManager inicializado com sucesso!");
+    Serial.println("[MAIN] ConfigManager initialized successfully!");
     ConfigManager::printAllConfigs();
     
     // Initialize debug variables
@@ -603,71 +603,71 @@ void setup() {
     TOUCH_LOGS_ENABLED = ConfigManager::isTouchLogsEnabled();
     ALL_LOGS_ENABLED = ConfigManager::isAllLogsEnabled();
     
-    Serial.printf("[MAIN] Debug configurado: DEBUG=%s, TOUCH=%s, ALL=%s\n",
+    Serial.printf("[MAIN] Debug configured: DEBUG=%s, TOUCH=%s, ALL=%s\n",
                   DEBUG_LOGS_ENABLED ? "ON" : "OFF",
                   TOUCH_LOGS_ENABLED ? "ON" : "OFF", 
                   ALL_LOGS_ENABLED ? "ON" : "OFF");
   }
 
-  // Carregar targets do config.env
-  Serial.println("[MAIN] Carregando targets...");
+  // Load targets from config.env
+  Serial.println("[MAIN] Loading targets...");
   loadTargetsFromConfig();
-  Serial.printf("[MAIN] %d targets carregados com sucesso!\n", N_TARGETS);
+  Serial.printf("[MAIN] %d targets loaded successfully!\n", N_TARGETS);
   
-  // Connect to WiFi PRIMEIRO
+  // Connect to WiFi first
   LOGLN("[MAIN] Conectando ao WiFi...");
   if (!Net::connectWiFi(WIFI_SSID, WIFI_PASS)) {
-    LOGLN("[MAIN] ERRO: Falha ao conectar WiFi!");
+    LOGLN("[MAIN] ERROR: Failed to connect to WiFi!");
     // Continue anyway, maybe WiFi will connect later
   } else {
-    LOGLN("[MAIN] WiFi conectado com sucesso!");
+    LOGLN("[MAIN] WiFi connected successfully!");
     Net::printInfo();
   }
   
-  // Inicializar NTP DEPOIS do WiFi
-  Serial.println("[MAIN] Inicializando NTP...");
+  // Initialize NTP after WiFi
+  Serial.println("[MAIN] Initializing NTP...");
   if (!NTPManager::begin()) {
-    Serial.println("[MAIN] ERRO: Falha ao inicializar NTP!");
-    Serial.println("[MAIN] Continuando sem NTP...");
+    Serial.println("[MAIN] ERROR: Failed to initialize NTP!");
+    Serial.println("[MAIN] Continuing without NTP...");
   } else {
-    Serial.println("[MAIN] NTP inicializado com sucesso!");
+    Serial.println("[MAIN] NTP initialized successfully!");
   }
   
   // ===== CONFIGURATION MANAGEMENT =====
   // Initialize SDConfigManager after WiFi and NTP are ready
-  Serial.println("[MAIN] Inicializando SDConfigManager...");
+  Serial.println("[MAIN] Initializing SDConfigManager...");
   if (!SDConfigManager::begin()) {
-    Serial.println("[MAIN] ERRO: Falha ao inicializar SDConfigManager!");
-    Serial.println("[MAIN] Continuando sem SD...");
+    Serial.println("[MAIN] ERROR: Failed to initialize SDConfigManager!");
+    Serial.println("[MAIN] Continuing without SD...");
   } else {
-    Serial.println("[MAIN] SDConfigManager inicializado!");
+    Serial.println("[MAIN] SDConfigManager initialized!");
     
-    // Verificar se SD tem config mais nova que SPIFFS
+    // Check if SD has newer config than SPIFFS
     if (SDConfigManager::hasNewerConfig()) {
-      Serial.println("[MAIN] SD tem config mais nova! Copiando para SPIFFS...");
+      Serial.println("[MAIN] SD has newer config! Copying to SPIFFS...");
       
       if (SDConfigManager::copySDToSPIFFS()) {
-        Serial.println("[MAIN] Config copiada com sucesso! Reiniciando...");
-        delay(3000); // Dar tempo para logs e evitar loops
-        ESP.restart(); // Reiniciar para carregar nova config
+        Serial.println("[MAIN] Config copied successfully! Restarting...");
+        delay(3000); // Give time for logs and avoid loops
+        ESP.restart(); // Restart to load new config
       } else {
-        Serial.println("[MAIN] ERRO: Falha ao copiar config do SD!");
-        Serial.println("[MAIN] Continuando com config do SPIFFS...");
+        Serial.println("[MAIN] ERROR: Failed to copy config from SD!");
+        Serial.println("[MAIN] Continuing with SPIFFS config...");
       }
     } else {
-      Serial.println("[MAIN] SPIFFS já tem a config mais recente!");
+      Serial.println("[MAIN] SPIFFS already has the latest config!");
     }
   }
   
   start_time = millis(); // Initialize start time for uptime calculation
 
   // Initialize display
-  Serial.println("[MAIN] Inicializando display...");
+  Serial.println("[MAIN] Initializing display...");
   if (!DisplayManager::begin()) {
-    Serial.println("[MAIN] ERRO: Falha ao inicializar display!");
+    Serial.println("[MAIN] ERROR: Failed to initialize display!");
     return;
   }
-  Serial.println("[MAIN] Display inicializado com sucesso!");
+  Serial.println("[MAIN] Display initialized successfully!");
 
   // Load LED configuration
   LED_PIN_R = ConfigManager::getLedPinR();
@@ -692,14 +692,14 @@ void setup() {
 
   // Initialize touch
   if (!Touch::beginHSPI()) {
-    LOGLN("[MAIN] ERRO: Falha ao inicializar touch!");
+    LOGLN("[MAIN] ERROR: Failed to initialize touch!");
     return;
   }
-  LOGLN("[MAIN] Touch inicializado com sucesso!");
+  LOGLN("[MAIN] Touch initialized successfully!");
 
   // Initialize network scanner
   if (!ScanManager::begin(targets, N_TARGETS)) {
-    LOGLN("[MAIN] ERRO: Falha ao inicializar scanner!");
+    LOGLN("[MAIN] ERROR: Failed to initialize scanner!");
     return;
   }
   // Wire scan callbacks to post events for the Display task (no direct LVGL calls here)
@@ -724,22 +724,22 @@ void setup() {
     }
   );
   scanner_initialized = true;
-  LOGLN("[MAIN] Scanner inicializado com sucesso!");
+  LOGLN("[MAIN] Scanner initialized successfully!");
 
   // Initialize Telegram alerts
   if (initTelegramAlerts()) {
-    LOGLN("[MAIN] Sistema de alertas Telegram inicializado!");
+    LOGLN("[MAIN] Telegram alerts system initialized!");
     telegram_initialized = true;
     // Send initialization message
-    delay(2000); // Aguardar um pouco
+    delay(2000); // Wait a bit
     sendTestTelegramAlert();
   } else {
-    LOGLN("[MAIN] Sistema de alertas Telegram não inicializado (configuração necessária)");
+    LOGLN("[MAIN] Telegram alerts system not initialized (configuration required)");
     telegram_initialized = false;
   }
   
-  // Verificar status do Telegram
-  LOGF("[MAIN] Status do Telegram: %s\n", telegram_initialized ? "INICIALIZADO" : "NÃO INICIALIZADO");
+  // Check Telegram status
+  LOGF("[MAIN] Telegram status: %s\n", telegram_initialized ? "INITIALIZED" : "NOT INITIALIZED");
 
   // Initialize LVGL screen
   main_screen = lv_scr_act();
@@ -761,7 +761,7 @@ void setup() {
   lv_obj_center(title_label);
 
   // Clean interface design - no buttons, just status list
-  Serial.println("[MAIN] Interface limpa - sem botões, só lista!");
+  Serial.println("[MAIN] Clean interface - no buttons, just status list!");
 
   // Create main form container with flex layout - increased height
   lv_obj_t* main_form = lv_obj_create(main_screen);
@@ -842,7 +842,7 @@ void setup() {
 
   // Start scanning after everything is initialized
   ScanManager::startScanning();
-  Serial.println("[MAIN] Scanner iniciado!");
+  Serial.println("[MAIN] Scanner started!");
 
   // Create tasks pinned to specific cores
   // Display/UI task on Core 1 with higher priority
@@ -867,7 +867,7 @@ void setup() {
     0
   );
 
-  Serial.println("[MAIN] Setup completo! Interface pronta com footer!");
+  Serial.println("[MAIN] Setup complete! Interface ready!");
 }
 
 void loop() {
