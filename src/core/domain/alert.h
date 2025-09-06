@@ -15,6 +15,7 @@ private:
   bool alertSent;
   uint16_t lastLatency;
   unsigned long alertDowntimeStart;
+  unsigned long totalDowntime;
   
   // Configuration constants
   static const uint8_t MAX_FAILURES_BEFORE_ALERT = 3;

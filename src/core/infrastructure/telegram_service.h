@@ -26,7 +26,7 @@ public:
   void updateTargetStatus(int targetIndex, Status newStatus, uint16_t latency, const String& targetName);
   void sendAlert(int targetIndex, const String& targetName, Status status, uint16_t latency);
   void sendRecoveryAlert(int targetIndex, const String& targetName, uint16_t latency);
-  void sendTestMessage();
+  void sendTestMessage(const String* targetNames, int targetCount);
   
   // Status
   bool isActive() const;
@@ -40,6 +40,7 @@ private:
   // Message formatting
   String formatAlertMessage(const String& targetName, Status status, uint16_t latency, bool isRecovery = false, unsigned long totalDowntime = 0);
   String formatTime(unsigned long seconds) const;
+  String getCurrentTime() const;
   
   // HTTP communication
   bool sendMessage(const String& message);
