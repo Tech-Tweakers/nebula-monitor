@@ -1,61 +1,48 @@
-#include "config_manager.hpp"
+#include "config_loader.h"
 
-// Inicialização dos membros estáticos
-bool ConfigManager::initialized = false;
-String ConfigManager::configValues[50];
-const char* ConfigManager::configKeys[50];
-int ConfigManager::configCount = 0;
+// Static member definitions
+bool ConfigLoader::initialized = false;
+String ConfigLoader::configValues[50];
+const char* ConfigLoader::configKeys[50];
+int ConfigLoader::configCount = 0;
 
-bool ConfigManager::begin() {
+bool ConfigLoader::load() {
   if (initialized) return true;
   
-  Serial.println("[CONFIG] Initializing ConfigManager...");
+  Serial.println("[CONFIG] Loading configuration...");
   
-  // Inicializar SPIFFS
-  Serial.println("[CONFIG] Initializing SPIFFS...");
+  // Initialize SPIFFS
   if (!SPIFFS.begin(true)) {
-    Serial.println("[CONFIG] Error initializing SPIFFS!");
+    Serial.println("[CONFIG] ERROR: Failed to initialize SPIFFS!");
     return false;
   }
-  Serial.println("[CONFIG] SPIFFS initialized successfully!");
   
-  // Listar arquivos no SPIFFS
-  Serial.println("[CONFIG] Listing files in SPIFFS:");
-  File root = SPIFFS.open("/");
-  File file = root.openNextFile();
-  while (file) {
-    Serial.printf("[CONFIG] File: %s (size: %d bytes)\n", file.name(), file.size());
-    file = root.openNextFile();
-  }
-  
-  // Verificar se arquivo existe
-  Serial.println("[CONFIG] Checking if config.env exists...");
+  // Check if config file exists
   if (!SPIFFS.exists("/config.env")) {
-    Serial.println("[CONFIG] config.env file not found!");
+    Serial.println("[CONFIG] ERROR: config.env file not found!");
     return false;
   }
-  Serial.println("[CONFIG] config.env file found!");
   
-  // Ler arquivo de configuração
-  file = SPIFFS.open("/config.env", "r");
+  // Read config file
+  File file = SPIFFS.open("/config.env", "r");
   if (!file) {
-    Serial.println("[CONFIG] Error opening config.env!");
+    Serial.println("[CONFIG] ERROR: Failed to open config.env!");
     return false;
   }
   
-  // Limpar arrays
+  // Clear arrays
   configCount = 0;
   for (int i = 0; i < 50; i++) {
     configKeys[i] = nullptr;
     configValues[i] = "";
   }
   
-  // Ler linha por linha
+  // Parse file line by line
   while (file.available() && configCount < 50) {
     String line = file.readStringUntil('\n');
     line.trim();
     
-    // Pular linhas vazias e comentários
+    // Skip empty lines and comments
     if (line.length() == 0 || line.startsWith("#")) {
       continue;
     }
@@ -66,17 +53,27 @@ bool ConfigManager::begin() {
   file.close();
   initialized = true;
   
-  Serial.printf("[CONFIG] ConfigManager initialized with %d configurations\n", configCount);
+  Serial.printf("[CONFIG] Configuration loaded successfully! (%d settings)\n", configCount);
   return true;
 }
 
-void ConfigManager::end() {
-  initialized = false;
-  configCount = 0;
-  Serial.println("[CONFIG] ConfigManager finalizado");
+void ConfigLoader::cleanup() {
+  if (initialized) {
+    // Free allocated strings
+    for (int i = 0; i < configCount; i++) {
+      if (configKeys[i]) {
+        free((void*)configKeys[i]);
+        configKeys[i] = nullptr;
+      }
+    }
+    
+    configCount = 0;
+    initialized = false;
+    Serial.println("[CONFIG] Configuration cleaned up");
+  }
 }
 
-void ConfigManager::parseConfigLine(const String& line) {
+void ConfigLoader::parseConfigLine(const String& line) {
   int equalPos = line.indexOf('=');
   if (equalPos == -1) return;
   
@@ -86,12 +83,12 @@ void ConfigManager::parseConfigLine(const String& line) {
   key.trim();
   value.trim();
   
-  // Remover aspas se existirem
+  // Remove quotes if present
   if (value.startsWith("\"") && value.endsWith("\"")) {
     value = value.substring(1, value.length() - 1);
   }
   
-  // Usar strdup para criar cópias permanentes das strings
+  // Store using strdup for permanent storage
   char* keyCopy = strdup(key.c_str());
   char* valueCopy = strdup(value.c_str());
   
@@ -102,7 +99,7 @@ void ConfigManager::parseConfigLine(const String& line) {
   Serial.printf("[CONFIG] %s = %s\n", keyCopy, valueCopy);
 }
 
-String ConfigManager::getValue(const char* key, const String& defaultValue) {
+String ConfigLoader::getValue(const char* key, const String& defaultValue) {
   for (int i = 0; i < configCount; i++) {
     if (strcmp(configKeys[i], key) == 0) {
       return configValues[i];
@@ -111,76 +108,74 @@ String ConfigManager::getValue(const char* key, const String& defaultValue) {
   return defaultValue;
 }
 
-// WiFi
-String ConfigManager::getWifiSSID() {
+// WiFi Configuration
+String ConfigLoader::getWifiSSID() {
   return getValue("WIFI_SSID", "Polaris");
 }
 
-String ConfigManager::getWifiPass() {
+String ConfigLoader::getWifiPassword() {
   return getValue("WIFI_PASS", "55548502");
 }
 
-// Telegram
-String ConfigManager::getTelegramBotToken() {
+// Telegram Configuration
+String ConfigLoader::getTelegramBotToken() {
   return getValue("TELEGRAM_BOT_TOKEN", "YOUR_BOT_TOKEN_HERE");
 }
 
-String ConfigManager::getTelegramChatId() {
+String ConfigLoader::getTelegramChatId() {
   return getValue("TELEGRAM_CHAT_ID", "YOUR_CHAT_ID_HERE");
 }
 
-bool ConfigManager::isTelegramEnabled() {
+bool ConfigLoader::isTelegramEnabled() {
   String value = getValue("TELEGRAM_ENABLED", "true");
   return value.equalsIgnoreCase("true");
 }
 
-// Alerts
-int ConfigManager::getMaxFailuresBeforeAlert() {
+// Alert Configuration
+int ConfigLoader::getMaxFailuresBeforeAlert() {
   return getValue("MAX_FAILURES_BEFORE_ALERT", "3").toInt();
 }
 
-unsigned long ConfigManager::getAlertCooldownMs() {
+unsigned long ConfigLoader::getAlertCooldownMs() {
   return getValue("ALERT_COOLDOWN_MS", "300000").toInt();
 }
 
-unsigned long ConfigManager::getAlertRecoveryCooldownMs() {
+unsigned long ConfigLoader::getAlertRecoveryCooldownMs() {
   return getValue("ALERT_RECOVERY_COOLDOWN_MS", "60000").toInt();
 }
 
-// Debug
-bool ConfigManager::isDebugLogsEnabled() {
+// Debug Configuration
+bool ConfigLoader::isDebugLogsEnabled() {
   String value = getValue("DEBUG_LOGS_ENABLED", "false");
   return value.equalsIgnoreCase("true");
 }
 
-bool ConfigManager::isTouchLogsEnabled() {
+bool ConfigLoader::isTouchLogsEnabled() {
   String value = getValue("TOUCH_LOGS_ENABLED", "false");
   return value.equalsIgnoreCase("true");
 }
 
-bool ConfigManager::isAllLogsEnabled() {
+bool ConfigLoader::isAllLogsEnabled() {
   String value = getValue("ALL_LOGS_ENABLED", "true");
   return value.equalsIgnoreCase("true");
 }
 
 // Network Targets
-int ConfigManager::getTargetCount() {
+int ConfigLoader::getTargetCount() {
   int count = 0;
   for (int i = 1; i <= 10; i++) {
     String key = "TARGET_" + String(i);
     String value = getValue(key.c_str(), "");
-    Serial.printf("[CONFIG] Checking %s: '%s' (length=%d)\n", key.c_str(), value.c_str(), value.length());
     if (value.length() > 0) {
       count++;
     } else {
       break;
     }
   }
-  Serial.printf("[CONFIG] Total targets found: %d\n", count);
   return count;
 }
 
-String ConfigManager::getTargetName(int index) {
+String ConfigLoader::getTargetName(int index) {
   String key = "TARGET_" + String(index + 1);
   String value = getValue(key.c_str(), "");
   if (value.length() == 0) return "";
@@ -191,7 +186,7 @@ String ConfigManager::getTargetName(int index) {
   return value.substring(0, pipe1);
 }
 
-String ConfigManager::getTargetUrl(int index) {
+String ConfigLoader::getTargetUrl(int index) {
   String key = "TARGET_" + String(index + 1);
   String value = getValue(key.c_str(), "");
   if (value.length() == 0) return "";
@@ -205,7 +200,7 @@ String ConfigManager::getTargetUrl(int index) {
   return value.substring(pipe1 + 1, pipe2);
 }
 
-String ConfigManager::getTargetHealthEndpoint(int index) {
+String ConfigLoader::getTargetHealthEndpoint(int index) {
   String key = "TARGET_" + String(index + 1);
   String value = getValue(key.c_str(), "");
   if (value.length() == 0) return "";
@@ -223,7 +218,7 @@ String ConfigManager::getTargetHealthEndpoint(int index) {
   return endpoint.length() == 0 ? "" : endpoint;
 }
 
-String ConfigManager::getTargetMonitorType(int index) {
+String ConfigLoader::getTargetMonitorType(int index) {
   String key = "TARGET_" + String(index + 1);
   String value = getValue(key.c_str(), "");
   if (value.length() == 0) return "PING";
@@ -234,110 +229,118 @@ String ConfigManager::getTargetMonitorType(int index) {
   return value.substring(pipe3 + 1);
 }
 
-// Display
-int ConfigManager::getDisplayRotation() {
+// Display Configuration
+int ConfigLoader::getDisplayRotation() {
   return getValue("DISPLAY_ROTATION", "2").toInt();
 }
 
-int ConfigManager::getBacklightPin() {
+int ConfigLoader::getBacklightPin() {
   return getValue("BACKLIGHT_PIN", "27").toInt();
 }
 
-// Touch
-int ConfigManager::getTouchSckPin() {
+// Touch Configuration
+int ConfigLoader::getTouchSckPin() {
   return getValue("TOUCH_SCK_PIN", "14").toInt();
 }
 
-int ConfigManager::getTouchMosiPin() {
+int ConfigLoader::getTouchMosiPin() {
   return getValue("TOUCH_MOSI_PIN", "13").toInt();
 }
 
-int ConfigManager::getTouchMisoPin() {
+int ConfigLoader::getTouchMisoPin() {
   return getValue("TOUCH_MISO_PIN", "12").toInt();
 }
 
-int ConfigManager::getTouchCsPin() {
+int ConfigLoader::getTouchCsPin() {
   return getValue("TOUCH_CS_PIN", "33").toInt();
 }
 
-int ConfigManager::getTouchIrqPin() {
+int ConfigLoader::getTouchIrqPin() {
   return getValue("TOUCH_IRQ_PIN", "36").toInt();
 }
 
-int ConfigManager::getTouchXMin() {
+int ConfigLoader::getTouchXMin() {
   return getValue("TOUCH_X_MIN", "200").toInt();
 }
 
-int ConfigManager::getTouchXMax() {
+int ConfigLoader::getTouchXMax() {
   return getValue("TOUCH_X_MAX", "3700").toInt();
 }
 
-int ConfigManager::getTouchYMin() {
+int ConfigLoader::getTouchYMin() {
   return getValue("TOUCH_Y_MIN", "240").toInt();
 }
 
-int ConfigManager::getTouchYMax() {
+int ConfigLoader::getTouchYMax() {
   return getValue("TOUCH_Y_MAX", "3800").toInt();
 }
 
-// Performance
-unsigned long ConfigManager::getScanIntervalMs() {
+// Performance Configuration
+unsigned long ConfigLoader::getScanIntervalMs() {
   return getValue("SCAN_INTERVAL_MS", "30000").toInt();
 }
 
-unsigned long ConfigManager::getTouchFilterMs() {
+unsigned long ConfigLoader::getTouchFilterMs() {
   return getValue("TOUCH_FILTER_MS", "500").toInt();
 }
 
-unsigned long ConfigManager::getHttpTimeoutMs() {
+unsigned long ConfigLoader::getHttpTimeoutMs() {
   return getValue("HTTP_TIMEOUT_MS", "5000").toInt();
 }
 
-// Debug
-void ConfigManager::printAllConfigs() {
-  Serial.println("[CONFIG] === All configurations ===");
+// LED Configuration
+int ConfigLoader::getLedPinR() {
+  return getValue("LED_PIN_R", "16").toInt();
+}
+
+int ConfigLoader::getLedPinG() {
+  return getValue("LED_PIN_G", "17").toInt();
+}
+
+int ConfigLoader::getLedPinB() {
+  return getValue("LED_PIN_B", "20").toInt();
+}
+
+bool ConfigLoader::isLedActiveHigh() {
+  String value = getValue("LED_ACTIVE_HIGH", "false");
+  return value.equalsIgnoreCase("true");
+}
+
+int ConfigLoader::getLedPwmFreq() {
+  return getValue("LED_PWM_FREQ", "5000").toInt();
+}
+
+int ConfigLoader::getLedPwmResBits() {
+  return getValue("LED_PWM_RES_BITS", "8").toInt();
+}
+
+int ConfigLoader::getLedBrightR() {
+  return getValue("LED_BRIGHT_R", "32").toInt();
+}
+
+int ConfigLoader::getLedBrightG() {
+  return getValue("LED_BRIGHT_G", "12").toInt();
+}
+
+int ConfigLoader::getLedBrightB() {
+  return getValue("LED_BRIGHT_B", "12").toInt();
+}
+
+// NTP Configuration
+int ConfigLoader::getTimezoneOffset() {
+  return getValue("TIMEZONE_OFFSET", "-10800").toInt();
+}
+
+String ConfigLoader::getNtpServer() {
+  return getValue("NTP_SERVER", "pool.ntp.org");
+}
+
+void ConfigLoader::printAllConfigs() {
+  Serial.println("[CONFIG] === All Configuration Settings ===");
   for (int i = 0; i < configCount; i++) {
     if (configKeys[i] != nullptr) {
       Serial.printf("[CONFIG] %s = %s\n", configKeys[i], configValues[i].c_str());
     }
   }
-  Serial.println("[CONFIG] ==============================");
-}
-
-// LED (RGB Status)
-int ConfigManager::getLedPinR() {
-  return getValue("LED_PIN_R", "16").toInt();
-}
-
-int ConfigManager::getLedPinG() {
-  return getValue("LED_PIN_G", "17").toInt();
-}
-
-int ConfigManager::getLedPinB() {
-  return getValue("LED_PIN_B", "20").toInt();
-}
-
-bool ConfigManager::isLedActiveHigh() {
-  String v = getValue("LED_ACTIVE_HIGH", "false");
-  return v.equalsIgnoreCase("true");
-}
-
-int ConfigManager::getLedPwmFreq() {
-  return getValue("LED_PWM_FREQ", "5000").toInt();
-}
-
-int ConfigManager::getLedPwmResBits() {
-  return getValue("LED_PWM_RES_BITS", "8").toInt();
-}
-
-int ConfigManager::getLedBrightR() {
-  return getValue("LED_BRIGHT_R", "32").toInt();
-}
-
-int ConfigManager::getLedBrightG() {
-  return getValue("LED_BRIGHT_G", "12").toInt();
-}
-
-int ConfigManager::getLedBrightB() {
-  return getValue("LED_BRIGHT_B", "12").toInt();
+  Serial.println("[CONFIG] ===================================");
 }
