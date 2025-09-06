@@ -114,9 +114,6 @@ void setup() {
   bool telegramEnabled = ConfigLoader::isTelegramEnabled();
   if (telegramService->initialize(botToken, chatId, telegramEnabled)) {
     Serial.println("[MAIN] Telegram service initialized!");
-    // Send test message
-    delay(2000);
-    telegramService->sendTestMessage();
   } else {
     Serial.println("[MAIN] Telegram service not available");
   }
@@ -135,6 +132,20 @@ void setup() {
   
   // Set targets for display
   displayManager->setTargets(networkMonitor->getTargets(), networkMonitor->getTargetCount());
+  
+  // Send test message with targets if Telegram is active and targets are loaded
+  if (telegramService->isActive()) {
+    int targetCount = networkMonitor->getTargetCount();
+    if (targetCount > 0) {
+      String targetNames[10];
+      for (int i = 0; i < targetCount; i++) {
+        targetNames[i] = networkMonitor->getTargets()[i].getName();
+      }
+      telegramService->sendTestMessage(targetNames, targetCount);
+    } else {
+      Serial.println("[MAIN] WARNING: No targets loaded, skipping Telegram test message");
+    }
+  }
   
   // Initialize LED controller
   if (!LEDController::initialize()) {

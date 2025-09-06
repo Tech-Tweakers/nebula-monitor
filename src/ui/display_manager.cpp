@@ -216,7 +216,7 @@ void DisplayManager::createFooter() {
   
   // Footer label
   footer_label = lv_label_create(footer);
-  lv_label_set_text(footer_label, "System: OK | Alerts: 0 | 6/6 UP");
+  lv_label_set_text(footer_label, "Preparing to work...");
   lv_obj_set_style_text_color(footer_label, lv_color_hex(0xCCCCCC), LV_PART_MAIN);
   lv_obj_set_width(footer_label, LV_PCT(100));
   lv_obj_set_style_text_align(footer_label, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);

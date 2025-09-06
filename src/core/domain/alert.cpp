@@ -4,7 +4,7 @@ Alert::Alert(int index, const String& name)
   : targetIndex(index), targetName(name ? name : "Unknown"), 
     currentStatus(UNKNOWN), lastStatus(UNKNOWN), failureCount(0),
     firstFailureTime(0), lastAlertTime(0), isActive(false), 
-    alertSent(false), lastLatency(0), alertDowntimeStart(0) {
+    alertSent(false), lastLatency(0), alertDowntimeStart(0), totalDowntime(0) {
 }
 
 void Alert::updateStatus(Status newStatus, uint16_t latency) {
@@ -77,17 +77,29 @@ void Alert::markAlertSent() {
 }
 
 void Alert::markRecovered() {
+  // Save total downtime before resetting
+  if (firstFailureTime > 0) {
+    totalDowntime = (millis() - firstFailureTime) / 1000;
+  }
+  
   failureCount = 0;
   alertSent = false;
   firstFailureTime = 0;
   alertDowntimeStart = 0;
   isActive = false;
   lastAlertTime = millis();
-  Serial.printf("[ALERT] %s: Marked as recovered\n", targetName.c_str());
+  Serial.printf("[ALERT] %s: Marked as recovered (total downtime: %lu seconds)\n", targetName.c_str(), totalDowntime);
 }
 
 unsigned long Alert::getDowntime() const {
-  return firstFailureTime > 0 ? (millis() - firstFailureTime) / 1000 : 0;
+  if (firstFailureTime > 0) {
+    // Target is still down, return current downtime
+    return (millis() - firstFailureTime) / 1000;
+  } else if (totalDowntime > 0) {
+    // Target recovered, return saved total downtime
+    return totalDowntime;
+  }
+  return 0;
 }
 
 void Alert::setTargetName(const String& name) {

@@ -102,14 +102,47 @@ void TelegramService::sendRecoveryAlert(int targetIndex, const String& targetNam
   sendingMessage = false;
 }
 
-void TelegramService::sendTestMessage() {
+void TelegramService::sendTestMessage(const String* targetNames, int targetCount) {
   if (!enabled) {
     Serial.println("[TELEGRAM] Service not active, skipping test message");
     return;
   }
 
   String testMessage = "🤖 <b>Nebula Monitor v2.4</b>\n";
-  testMessage += "✅ Service is active!";
+  testMessage += "✅ <b>System Initialized Successfully!</b>\n\n";
+  
+  // WiFi Status
+  if (WiFi.status() == WL_CONNECTED) {
+    testMessage += "📶 <b>WiFi:</b> Connected\n";
+    testMessage += "🌐 <b>IP:</b> " + WiFi.localIP().toString() + "\n";
+    testMessage += "📡 <b>RSSI:</b> " + String(WiFi.RSSI()) + " dBm\n\n";
+  } else {
+    testMessage += "📶 <b>WiFi:</b> Disconnected\n\n";
+  }
+  
+  // Services Status
+  testMessage += "🔧 <b>Services:</b>\n";
+  testMessage += "• Telegram: ✅ Active\n";
+  testMessage += "• Display: ✅ Active\n";
+  testMessage += "• Network Monitor: ✅ Active\n";
+  testMessage += "• Task Manager: ✅ Active\n\n";
+  
+  // Targets Info
+  testMessage += "🎯 <b>Monitoring Targets:</b>\n";
+  if (targetNames && targetCount > 0) {
+    for (int i = 0; i < targetCount; i++) {
+      if (targetNames[i].length() > 0) {
+        testMessage += "• " + targetNames[i] + "\n";
+      }
+    }
+  } else {
+    testMessage += "• No targets configured\n";
+  }
+  
+  testMessage += "\n⏰ <b>Scan Interval:</b> 30s\n";
+  testMessage += "🚨 <b>Alert Threshold:</b> 3 failures\n";
+  testMessage += "⏱️ <b>Cooldown:</b> 5 minutes\n\n";
+  testMessage += "🔄 <b>System is now monitoring...</b>";
   
   sendMessage(testMessage);
 }
@@ -137,20 +170,27 @@ int TelegramService::getFailureCount(int targetIndex) const {
 }
 
 String TelegramService::formatAlertMessage(const String& targetName, Status status, uint16_t latency, bool isRecovery, unsigned long totalDowntime) {
-  String message = "🚨 <b>Network Alert</b>\n\n";
+  String message = "";
   
   if (isRecovery) {
-    message += "🟢 <b>RECOVERED:</b> " + targetName + "\n";
+    message += "🎉 <b>SYSTEM ONLINE</b>\n\n";
+    message += "🟢 <b>Target:</b> " + targetName + "\n";
     message += "⏱️ <b>Downtime:</b> " + formatTime(totalDowntime) + "\n";
-    message += "🕐 <b>Recovered:</b> " + String(millis() / 1000) + "s ago";
+    message += "📊 <b>Current Latency:</b> " + String(latency) + "ms\n\n";
+    message += "✅ <b>Service is back online!</b>";
   } else if (status == DOWN) {
-    message += "🔴 <b>DOWN:</b> " + targetName + "\n";
-    message += "⏰ <b>Latency:</b> " + String(latency) + "ms\n";
-    message += "🕐 <b>Detected:</b> " + String(millis() / 1000) + "s ago";
+    message += "🚨 <b>SYSTEM DOWN</b>\n\n";
+    message += "🔴 <b>Target:</b> " + targetName + "\n";
+    message += "📊 <b>Last Response:</b> " + String(latency) + "ms\n";
+    message += "🕐 <b>Detected:</b> " + getCurrentTime() + "\n";
+    message += "⚠️ <b>Status:</b> Unreachable\n\n";
+    message += "🔍 <b>Waiting for recovery...</b>";
   } else {
-    message += "🟡 <b>UNKNOWN:</b> " + targetName + "\n";
-    message += "⏰ <b>Latency:</b> " + String(latency) + "ms\n";
-    message += "🕐 <b>Detected:</b> " + String(millis() / 1000) + "s ago";
+    message += "❓ <b>UNKNOWN STATUS</b>\n\n";
+    message += "🟡 <b>Target:</b> " + targetName + "\n";
+    message += "📊 <b>Response:</b> " + String(latency) + "ms\n";
+    message += "🕐 <b>Detected:</b> " + getCurrentTime() + "\n\n";
+    message += "🔍 <b>Status unclear, waiting...</b>";
   }
   
   return message;
@@ -158,24 +198,41 @@ String TelegramService::formatAlertMessage(const String& targetName, Status stat
 
 String TelegramService::formatTime(unsigned long seconds) const {
   if (seconds < 60) {
-    return String(seconds) + " segundos";
+    return String(seconds) + "s";
   } else if (seconds < 3600) {
     unsigned long minutes = seconds / 60;
     unsigned long remainingSeconds = seconds % 60;
     if (remainingSeconds == 0) {
-      return String(minutes) + " minuto" + (minutes > 1 ? "s" : "");
+      return String(minutes) + "m";
     } else {
-      return String(minutes) + " minuto" + (minutes > 1 ? "s" : "") + " e " + String(remainingSeconds) + " segundo" + (remainingSeconds > 1 ? "s" : "");
+      return String(minutes) + "m " + String(remainingSeconds) + "s";
     }
   } else {
     unsigned long hours = seconds / 3600;
     unsigned long minutes = (seconds % 3600) / 60;
     if (minutes == 0) {
-      return String(hours) + " hora" + (hours > 1 ? "s" : "");
+      return String(hours) + "h";
     } else {
-      return String(hours) + " hora" + (hours > 1 ? "s" : "") + " e " + String(minutes) + " minuto" + (minutes > 1 ? "s" : "");
+      return String(hours) + "h " + String(minutes) + "m";
     }
   }
+}
+
+String TelegramService::getCurrentTime() const {
+  unsigned long now = millis();
+  unsigned long hours = (now / 3600000) % 24;
+  unsigned long minutes = (now / 60000) % 60;
+  unsigned long seconds = (now / 1000) % 60;
+  
+  String timeStr = "";
+  if (hours < 10) timeStr += "0";
+  timeStr += String(hours) + ":";
+  if (minutes < 10) timeStr += "0";
+  timeStr += String(minutes) + ":";
+  if (seconds < 10) timeStr += "0";
+  timeStr += String(seconds);
+  
+  return timeStr;
 }
 
 bool TelegramService::sendMessage(const String& message) {
