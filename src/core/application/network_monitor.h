@@ -57,6 +57,10 @@ public:
   void setScanInterval(unsigned long interval) { scanInterval = interval; }
   unsigned long getScanInterval() const { return scanInterval; }
   
+  // Performance and diagnostics
+  void printPerformanceMetrics() const;
+  void resetPerformanceMetrics();
+  
 private:
   // Internal methods
   void processScanResults();
