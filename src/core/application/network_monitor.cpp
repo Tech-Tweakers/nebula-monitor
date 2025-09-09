@@ -151,27 +151,23 @@ void NetworkMonitor::scanTarget(int index) {
   
   Target& target = targets[index];
   
-  // Limit string operations to prevent stack issues
-  String name = target.getName();
-  if (name.length() > 50) {
-    name = name.substring(0, 50) + "...";
-  }
+  // Optimized string handling
+  const char* name = target.getName().c_str();
+  const char* typeStr = (target.getMonitorType() == HEALTH_CHECK) ? "HEALTH_CHECK" : "PING";
   
-  Serial.printf("[NETWORK_MONITOR] Checking %s (type: %s)...\n", 
-               name.c_str(), 
-               target.getMonitorType() == HEALTH_CHECK ? "HEALTH_CHECK" : "PING");
+  Serial.printf("[NETWORK_MONITOR] Checking %s (type: %s)...\n", name, typeStr);
   
   uint16_t latency = 0;
   
-  // Add small delay to prevent overwhelming the system
-  vTaskDelay(pdMS_TO_TICKS(100));
+  // Reduced delay for better performance
+  vTaskDelay(pdMS_TO_TICKS(50));
   
   if (target.getMonitorType() == HEALTH_CHECK) {
-    // Use safe health check with timeout and memory protection
-    latency = performSafeHealthCheck(target.getUrl());
+    // Use enhanced health check with intelligent timeout and retry
+    latency = performSafeHealthCheck(target.getUrl(), target.getHealthEndpoint());
   } else {
-    // Simple ping
-    latency = httpClient->ping(target.getUrl());
+    // Enhanced ping with intelligent timeout
+    latency = httpClient->ping(target.getUrl(), 0); // 0 = auto-calculate timeout
   }
   
   Status newStatus = (latency > 0) ? UP : DOWN;
@@ -204,49 +200,62 @@ void NetworkMonitor::processScanResults() {
   // For now, it's handled in updateTargetStatus
 }
 
-uint16_t NetworkMonitor::performSafeHealthCheck(const String& url) {
+uint16_t NetworkMonitor::performSafeHealthCheck(const String& url, const String& endpoint) {
   if (!httpClient) return 0;
   
-  // Limit URL length to prevent stack overflow
-  String safeUrl = url;
-  if (safeUrl.length() > 200) {
-    safeUrl = safeUrl.substring(0, 200);
+  // Enhanced URL safety checks
+  if (url.length() > 200) {
+    Serial.println("[NETWORK_MONITOR] ERROR: URL too long for health check");
+    return 0;
   }
   
-  Serial.printf("[NETWORK_MONITOR] Performing robust health check: %s\n", safeUrl.c_str());
+  Serial.printf("[NETWORK_MONITOR] Performing enhanced health check: %s%s\n", url.c_str(), endpoint.c_str());
   
-  // Use the robust health check with payload verification
-  uint16_t latency = httpClient->healthCheck(safeUrl, "", 10000); // 10 second timeout
+  // Use the enhanced health check with intelligent timeout and retry logic
+  uint16_t latency = httpClient->healthCheck(url, endpoint, 0); // 0 = auto-calculate timeout
   
   if (latency > 0) {
     // Get the response payload for verification
     String response = httpClient->getLastResponse();
+    int httpCode = httpClient->getLastHttpCode();
+    
     if (response.length() > 0 && response.length() < 1000) {
-      Serial.printf("[NETWORK_MONITOR] Response payload: %s\n", response.c_str());
-      
-      // Check if response indicates unhealthy status
-      if (response.indexOf("502 Bad Gateway") > 0 ||
-          response.indexOf("503 Service Unavailable") > 0 ||
-          response.indexOf("504 Gateway Timeout") > 0) {
-        Serial.println("[NETWORK_MONITOR] Health check FAILED: Server error detected");
-        return 0; // Return 0 to indicate DOWN
-      }
-      
-      // Check for explicit healthy indicators
-      if (response.indexOf("\"status\":\"healthy\"") > 0 || 
-          response.indexOf("\"health\":\"ok\"") > 0 ||
-          response.indexOf("\"status\":\"ok\"") > 0) {
-        Serial.println("[NETWORK_MONITOR] Health status confirmed: healthy");
-      } else if (response.length() < 100) {
-        Serial.println("[NETWORK_MONITOR] Health status: short response, likely OK");
+      // Enhanced response validation
+      if (httpClient->isHealthyResponse(response)) {
+        Serial.printf("[NETWORK_MONITOR] Health check successful: %d ms (HTTP %d)\n", latency, httpCode);
       } else {
-        Serial.println("[NETWORK_MONITOR] Health status: response received but not explicitly healthy");
-        return 0; // Return 0 to indicate DOWN for ambiguous responses
+        Serial.printf("[NETWORK_MONITOR] Health check FAILED: Unhealthy response detected (HTTP %d)\n", httpCode);
+        Serial.printf("[NETWORK_MONITOR] Response: %s\n", response.c_str());
+        return 0;
       }
+    } else {
+      Serial.printf("[NETWORK_MONITOR] Health check successful: %d ms (HTTP %d, no response validation)\n", latency, httpCode);
     }
-    Serial.printf("[NETWORK_MONITOR] Health check successful: %d ms\n", latency);
   } else {
-    Serial.println("[NETWORK_MONITOR] Health check failed: No response");
+    // Check error category for better logging
+    ErrorCategory errorCategory = httpClient->getLastErrorCategory();
+    int httpCode = httpClient->getLastHttpCode();
+    
+    switch (errorCategory) {
+      case ErrorCategory::SSL_ERROR:
+        Serial.printf("[NETWORK_MONITOR] Health check failed: SSL/TLS error (HTTP %d)\n", httpCode);
+        break;
+      case ErrorCategory::TEMPORARY:
+        Serial.printf("[NETWORK_MONITOR] Health check failed: Temporary network issue (HTTP %d)\n", httpCode);
+        break;
+      case ErrorCategory::PERMANENT:
+        Serial.printf("[NETWORK_MONITOR] Health check failed: Permanent error (HTTP %d)\n", httpCode);
+        break;
+      default:
+        Serial.printf("[NETWORK_MONITOR] Health check failed: Unknown error (HTTP %d)\n", httpCode);
+        break;
+    }
+    
+    // Log response details for debugging
+    String response = httpClient->getLastResponse();
+    if (response.length() > 0) {
+      Serial.printf("[NETWORK_MONITOR] Response: %s\n", response.c_str());
+    }
   }
   
   return latency;
@@ -268,4 +277,26 @@ MonitorType NetworkMonitor::parseMonitorType(const String& type) const {
     return HEALTH_CHECK;
   }
   return PING;
+}
+
+void NetworkMonitor::printPerformanceMetrics() const {
+  Serial.println("\n=== NETWORK MONITOR PERFORMANCE ===");
+  Serial.printf("Targets: %d\n", targetCount);
+  Serial.printf("Scanning: %s\n", scanning ? "YES" : "NO");
+  Serial.printf("Scan Interval: %lu ms\n", scanInterval);
+  Serial.printf("Last Scan: %lu ms ago\n", millis() - lastScanTime);
+  
+  if (httpClient) {
+    Serial.println("\n--- HTTP Client Metrics ---");
+    httpClient->printMetrics();
+  }
+  
+  Serial.println("===============================\n");
+}
+
+void NetworkMonitor::resetPerformanceMetrics() {
+  if (httpClient) {
+    httpClient->resetMetrics();
+  }
+  Serial.println("[NETWORK_MONITOR] Performance metrics reset");
 }

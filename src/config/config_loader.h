@@ -79,6 +79,11 @@ public:
   static int getTimezoneOffset();
   static String getNtpServer();
   
+  // Health Check Configuration
+  static String getHealthCheckHealthyPatterns();
+  static String getHealthCheckUnhealthyPatterns();
+  static bool isHealthCheckStrictMode();
+  
   // Debug
   static void printAllConfigs();
   static bool isInitialized() { return initialized; }

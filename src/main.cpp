@@ -8,6 +8,8 @@
 #include "core/infrastructure/wifi_service.h"
 #include "core/infrastructure/http_client.h"
 #include "core/infrastructure/telegram_service.h"
+#include "core/infrastructure/ssl_mutex_manager.h"
+#include "core/infrastructure/memory_manager.h"
 #include "ui/display_manager.h"
 #include "ui/touch_handler.h"
 #include "ui/led_controller.h"
@@ -98,7 +100,21 @@ void setup() {
   networkMonitor->setDependencies(wifiService, httpClient, telegramService, displayManager, taskManager);
   taskManager->setDependencies(networkMonitor, displayManager);
   
-  // 6. Initialize services
+  // 6. Initialize memory manager (Garbage Collection)
+  Serial.println("[MAIN] Initializing memory manager...");
+  if (!MemoryManager::getInstance().initialize()) {
+    Serial.println("[MAIN] ERROR: Failed to initialize memory manager!");
+    return;
+  }
+  
+  // 7. Initialize SSL mutex manager
+  Serial.println("[MAIN] Initializing SSL mutex manager...");
+  if (!SSLMutexManager::initialize()) {
+    Serial.println("[MAIN] ERROR: Failed to initialize SSL mutex manager!");
+    return;
+  }
+  
+  // 8. Initialize services
   Serial.println("[MAIN] Initializing services...");
   
   // Initialize WiFi
@@ -157,13 +173,13 @@ void setup() {
     Serial.println("[MAIN] WARNING: Failed to initialize touch handler!");
   }
   
-  // 7. Initialize task manager
+  // 9. Initialize task manager
   if (!taskManager->initialize()) {
     Serial.println("[MAIN] ERROR: Failed to initialize task manager!");
     return;
   }
   
-  // 8. Start tasks
+  // 10. Start tasks
   Serial.println("[MAIN] Starting FreeRTOS tasks...");
   if (!taskManager->startTasks()) {
     Serial.println("[MAIN] ERROR: Failed to start tasks!");
@@ -181,12 +197,30 @@ void setup() {
 
 void loop() {
   // All work is done by FreeRTOS tasks
-  // This loop just provides a heartbeat
+  // This loop provides heartbeat and memory management
   static unsigned long lastHeartbeat = 0;
-  if (millis() - lastHeartbeat >= 30000) { // Every 30 seconds
+  static unsigned long lastMemoryCheck = 0;
+  
+  uint32_t now = millis();
+  
+  // Heartbeat every 30 seconds
+  if (now - lastHeartbeat >= 30000) {
     Serial.println("[MAIN] System running...");
-    lastHeartbeat = millis();
+    
+    // Print memory stats with heartbeat
+    MemoryManager::getInstance().printMemoryStats();
+    
+    lastHeartbeat = now;
   }
+  
+  // Memory check every 10 seconds
+  if (now - lastMemoryCheck >= 10000) {
+    MemoryManager::getInstance().handleMemoryPressure();
+    lastMemoryCheck = now;
+  }
+  
+  // Feed watchdog
+  MemoryManager::getInstance().feedWatchdog();
   
   delay(1000);
 }

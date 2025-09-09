@@ -1,35 +1,58 @@
 #include "http_client.h"
+#include "config/config_loader.h"
+#include "memory_manager.h"
 
 HttpClient::HttpClient() {
   lastResponse = "";
+  lastHttpCode = -1;
+  secureClient = nullptr;
+  plainClient = nullptr;
+  clientInitialized = false;
+  
+  // Initialize metrics
+  metrics.totalRequests = 0;
+  metrics.successfulRequests = 0;
+  metrics.sslErrors = 0;
+  metrics.timeoutErrors = 0;
+  metrics.lastErrorTime = 0;
+  metrics.lastErrorCategory = ErrorCategory::UNKNOWN;
+  
+  // Initialize intelligent logging
+  metrics.lastLogTime = 0;
+  metrics.errorCountSinceLastLog = 0;
+  metrics.suppressRepeatedErrors = false;
+  
+  initializeClients();
 }
 
 HttpClient::~HttpClient() {
   http.end();
+  cleanupClients();
 }
 
 uint16_t HttpClient::ping(const String& url, uint16_t timeout) {
-  // Add extra safety checks for ping
+  // Enhanced safety checks
   if (url.length() > 200) {
     Serial.println("[HTTP] ERROR: URL too long for ping");
     return 0;
   }
   
-  // Use shorter timeout for ping to prevent blocking
-  if (timeout > 10000) timeout = 10000;
+  // Calculate intelligent timeout
+  uint16_t calculatedTimeout = calculateTimeout(url, timeout);
   
-  return performRequest(url, timeout, "GET");
+  return performRequestWithRetry(url, calculatedTimeout, "GET");
 }
 
 uint16_t HttpClient::healthCheck(const String& url, const String& endpoint, uint16_t timeout) {
-  // Limit URL length to prevent stack overflow
+  // Enhanced safety checks
   if (url.length() > 200) {
     Serial.println("[HTTP] ERROR: URL too long for health check");
     return 0;
   }
   
+  // Build full URL efficiently
   String fullUrl = url;
-  if (endpoint.length() > 0 && endpoint.length() < 100) { // Limit endpoint length
+  if (endpoint.length() > 0 && endpoint.length() < 100) {
     if (fullUrl.endsWith("/") && endpoint[0] == '/') {
       fullUrl = fullUrl.substring(0, fullUrl.length() - 1);
     } else if (!fullUrl.endsWith("/") && endpoint[0] != '/') {
@@ -38,59 +61,115 @@ uint16_t HttpClient::healthCheck(const String& url, const String& endpoint, uint
     fullUrl += endpoint;
   }
   
-  // Limit total URL length
   if (fullUrl.length() > 300) {
     Serial.println("[HTTP] ERROR: Full URL too long for health check");
     return 0;
   }
   
-  uint16_t latency = performRequest(fullUrl, timeout, "GET");
+  // Calculate intelligent timeout for health checks
+  uint16_t calculatedTimeout = calculateTimeout(fullUrl, timeout);
+  
+  uint16_t latency = performRequestWithRetry(fullUrl, calculatedTimeout, "GET");
   
   if (latency > 0) {
-    // For health checks, also verify the response content
-    // Limit response size check to prevent memory issues
+    // Check HTTP status code first
+    if (lastHttpCode < 200 || lastHttpCode >= 300) {
+      Serial.printf("[HTTP] Health check failed: HTTP %d\n", lastHttpCode);
+      return 0;
+    }
+    
+    // Enhanced health response validation
     if (lastResponse.length() > 0 && lastResponse.length() < 1000) {
       if (!isHealthyResponse(lastResponse)) {
-        return 0; // Consider as failed if response is not healthy
+        Serial.printf("[HTTP] Health check failed: Unhealthy response detected (HTTP %d)\n", lastHttpCode);
+        return 0;
       }
     }
+    
+    // Log successful health check with details
+    Serial.printf("[HTTP] Health check successful: %d ms (HTTP %d)\n", latency, lastHttpCode);
   }
   
   return latency;
 }
 
 String HttpClient::get(const String& url, uint16_t timeout) {
-  performRequest(url, timeout, "GET");
+  uint16_t calculatedTimeout = calculateTimeout(url, timeout);
+  performRequestWithRetry(url, calculatedTimeout, "GET");
   return lastResponse;
 }
 
 String HttpClient::post(const String& url, const String& data, uint16_t timeout) {
-  performRequest(url, timeout, "POST", data);
+  uint16_t calculatedTimeout = calculateTimeout(url, timeout);
+  performRequestWithRetry(url, calculatedTimeout, "POST", data);
   return lastResponse;
 }
 
 bool HttpClient::isHealthyResponse(const String& response) const {
   if (response.length() == 0) return false;
   
+  // Convert to lowercase for case-insensitive comparison
+  String lowerResponse = response;
+  lowerResponse.toLowerCase();
+  
+  // Get configuration patterns
+  String unhealthyPatterns = ConfigLoader::getHealthCheckUnhealthyPatterns();
+  String healthyPatterns = ConfigLoader::getHealthCheckHealthyPatterns();
+  bool strictMode = ConfigLoader::isHealthCheckStrictMode();
+  
   // Check for explicit unhealthy indicators first
-  if (response.indexOf("\"status\":\"unhealthy\"") > 0 || 
-      response.indexOf("\"status\":\"down\"") > 0 ||
-      response.indexOf("502 Bad Gateway") > 0 ||
-      response.indexOf("503 Service Unavailable") > 0 ||
-      response.indexOf("504 Gateway Timeout") > 0) {
-    return false;
+  int start = 0;
+  while (start < unhealthyPatterns.length()) {
+    int end = unhealthyPatterns.indexOf(',', start);
+    if (end == -1) end = unhealthyPatterns.length();
+    
+    String pattern = unhealthyPatterns.substring(start, end);
+    pattern.trim();
+    if (pattern.length() > 0 && lowerResponse.indexOf(pattern) >= 0) {
+      return false;
+    }
+    start = end + 1;
   }
   
   // Check for explicit healthy indicators
-  if (response.indexOf("\"status\":\"healthy\"") > 0 ||
-      response.indexOf("\"status\":\"ok\"") > 0 ||
-      response.indexOf("\"health\":\"ok\"") > 0) {
+  start = 0;
+  while (start < healthyPatterns.length()) {
+    int end = healthyPatterns.indexOf(',', start);
+    if (end == -1) end = healthyPatterns.length();
+    
+    String pattern = healthyPatterns.substring(start, end);
+    pattern.trim();
+    if (pattern.length() > 0 && lowerResponse.indexOf(pattern) >= 0) {
+      return true;
+    }
+    start = end + 1;
+  }
+  
+  // Check for simple success responses
+  if (lowerResponse == "ok" || 
+      lowerResponse == "healthy" || 
+      lowerResponse == "up" ||
+      lowerResponse == "running" ||
+      lowerResponse == "{\"ok\":true}" ||
+      lowerResponse == "{\"status\":\"ok\"}" ||
+      lowerResponse == "{\"health\":\"ok\"}") {
     return true;
   }
   
+  // In strict mode, require explicit health indicators
+  if (strictMode) {
+    return false;
+  }
+  
   // For responses without explicit health indicators, 
-  // only consider healthy if it's a short response (likely a simple OK)
-  if (response.length() < 100) {
+  // consider healthy if it's a short response (likely a simple status)
+  if (response.length() < 200) {
+    // Additional check: if it contains JSON-like structure, be more strict
+    if (response.indexOf("{") >= 0 && response.indexOf("}") >= 0) {
+      // It's JSON but doesn't have clear health indicators, consider unhealthy
+      return false;
+    }
+    // Simple text response, consider healthy
     return true;
   }
   
@@ -113,6 +192,12 @@ void HttpClient::clearHeaders() {
 uint16_t HttpClient::performRequest(const String& url, uint16_t timeout, const String& method, const String& data) {
   if (WiFi.status() != WL_CONNECTED) {
     Serial.println("[HTTP] WiFi not connected");
+    return 0;
+  }
+  
+  // Check memory before proceeding
+  if (MemoryManager::getInstance().isMemoryCritical()) {
+    Serial.println("[HTTP] ERROR: Critical memory condition, skipping request");
     return 0;
   }
   
@@ -141,6 +226,8 @@ uint16_t HttpClient::performRequest(const String& url, uint16_t timeout, const S
   
   // Clear last response to free memory
   lastResponse = "";
+  lastResponse.reserve(0); // Force memory deallocation
+  lastHttpCode = -1;
   
   if (isHttpsUrl(url)) {
     WiFiClientSecure client;
@@ -165,6 +252,10 @@ uint16_t HttpClient::performRequest(const String& url, uint16_t timeout, const S
         } else {
           lastResponse = response;
         }
+        
+        // Force cleanup of temporary response
+        response = "";
+        response.reserve(0);
       }
       http.end();
     }
@@ -190,10 +281,17 @@ uint16_t HttpClient::performRequest(const String& url, uint16_t timeout, const S
         } else {
           lastResponse = response;
         }
+        
+        // Force cleanup of temporary response
+        response = "";
+        response.reserve(0);
       }
       http.end();
     }
   }
+  
+  // Save the HTTP code for later retrieval
+  lastHttpCode = httpCode;
   
   uint32_t duration = millis() - startTime;
   Serial.printf("[HTTP] %s -> code=%d (%lums)\n", url.c_str(), httpCode, (unsigned long)duration);
@@ -227,4 +325,233 @@ void HttpClient::setupHeaders(const String& url) {
   if (url.indexOf("ngrok-free.app") >= 0) {
     http.addHeader("ngrok-skip-browser-warning", "true");
   }
+}
+
+// ===== ENHANCED IMPLEMENTATION =====
+
+void HttpClient::initializeClients() {
+  if (!clientInitialized) {
+    secureClient = new WiFiClientSecure();
+    plainClient = new WiFiClient();
+    clientInitialized = true;
+  }
+}
+
+void HttpClient::cleanupClients() {
+  if (clientInitialized) {
+    delete secureClient;
+    delete plainClient;
+    secureClient = nullptr;
+    plainClient = nullptr;
+    clientInitialized = false;
+  }
+}
+
+bool HttpClient::isConnectionHealthy() const {
+  return WiFi.status() == WL_CONNECTED;
+}
+
+uint16_t HttpClient::calculateTimeout(const String& url, uint16_t requestedTimeout) const {
+  if (requestedTimeout > 0) {
+    return min(requestedTimeout, (uint16_t)15000); // Cap at 15s
+  }
+  
+  ConnectionConfig config = getConnectionConfig(url);
+  return config.baseTimeout;
+}
+
+ConnectionConfig HttpClient::getConnectionConfig(const String& url) const {
+  ConnectionConfig config;
+  
+  if (url.indexOf("ngrok-free.app") >= 0) {
+    config.baseTimeout = 8000;
+    config.maxTimeout = 12000;
+    config.useInsecure = true;
+    config.retryOnError = true;
+    config.maxRetries = 2;
+    config.userAgent = "NebulaWatch/1.0";
+  } else if (url.indexOf("trycloudflare.com") >= 0) {
+    config.baseTimeout = 7000;
+    config.maxTimeout = 10000;
+    config.useInsecure = true;
+    config.retryOnError = true;
+    config.maxRetries = 2;
+    config.userAgent = "NebulaWatch/1.0";
+  } else if (url.indexOf("github.io") >= 0) {
+    config.baseTimeout = 5000;
+    config.maxTimeout = 8000;
+    config.useInsecure = false;
+    config.retryOnError = true;
+    config.maxRetries = 1;
+    config.userAgent = "NebulaWatch/1.0";
+  } else {
+    // Default configuration
+    config.baseTimeout = 5000;
+    config.maxTimeout = 10000;
+    config.useInsecure = false;
+    config.retryOnError = true;
+    config.maxRetries = 1;
+    config.userAgent = "NebulaWatch/1.0";
+  }
+  
+  return config;
+}
+
+ErrorCategory HttpClient::categorizeError(int httpCode, const String& url) const {
+  if (httpCode == -1) {
+    // Connection failed - check if it's SSL related
+    if (url.startsWith("https://")) {
+      return ErrorCategory::SSL_ERROR; // HTTPS connection failures are likely SSL
+    }
+    if (url.indexOf("ngrok") >= 0 || url.indexOf("cloudflare") >= 0) {
+      return ErrorCategory::TEMPORARY; // Tunnel services are often temporary
+    }
+    return ErrorCategory::TEMPORARY;
+  }
+  
+  if (httpCode >= 500) {
+    return ErrorCategory::TEMPORARY; // Server errors are usually temporary
+  }
+  
+  if (httpCode >= 400 && httpCode < 500) {
+    return ErrorCategory::PERMANENT; // Client errors are usually permanent
+  }
+  
+  return ErrorCategory::UNKNOWN;
+}
+
+bool HttpClient::shouldRetry(ErrorCategory category, uint8_t retryCount) const {
+  if (category == ErrorCategory::PERMANENT) {
+    return false; // Don't retry permanent errors
+  }
+  
+  if (category == ErrorCategory::SSL_ERROR && retryCount < 1) {
+    return true; // Retry SSL errors once (they're often temporary)
+  }
+  
+  if (category == ErrorCategory::TEMPORARY && retryCount < 2) {
+    return true; // Retry temporary errors up to 2 times
+  }
+  
+  return false;
+}
+
+uint16_t HttpClient::performRequestWithRetry(const String& url, uint16_t timeout, const String& method, const String& data) {
+  ConnectionConfig config = getConnectionConfig(url);
+  uint8_t retryCount = 0;
+  uint16_t lastLatency = 0;
+  
+  while (retryCount <= config.maxRetries) {
+    lastLatency = performRequest(url, timeout, method, data);
+    
+    if (lastLatency > 0) {
+      // Success
+      metrics.successfulRequests++;
+      return lastLatency;
+    }
+    
+    // Failed - categorize error
+    ErrorCategory errorCategory = categorizeError(-1, url); // -1 indicates connection failure
+    metrics.lastErrorCategory = errorCategory;
+    metrics.lastErrorTime = millis();
+    
+    if (errorCategory == ErrorCategory::SSL_ERROR) {
+      metrics.sslErrors++;
+    } else if (errorCategory == ErrorCategory::TEMPORARY) {
+      metrics.timeoutErrors++;
+    }
+    
+    if (!shouldRetry(errorCategory, retryCount)) {
+      break;
+    }
+    
+    retryCount++;
+    if (retryCount <= config.maxRetries) {
+      Serial.printf("[HTTP] Retry %d/%d for %s\n", retryCount, config.maxRetries, url.c_str());
+      vTaskDelay(pdMS_TO_TICKS(1000 * retryCount)); // Exponential backoff
+    }
+  }
+  
+  metrics.totalRequests++;
+  return 0;
+}
+
+void HttpClient::printMetrics() const {
+  Serial.println("\n=== HTTP CLIENT METRICS ===");
+  Serial.printf("Total Requests: %lu\n", metrics.totalRequests);
+  Serial.printf("Successful: %lu\n", metrics.successfulRequests);
+  Serial.printf("SSL Errors: %lu\n", metrics.sslErrors);
+  Serial.printf("Timeout Errors: %lu\n", metrics.timeoutErrors);
+  Serial.printf("Success Rate: %.1f%%\n", getSuccessRate());
+  Serial.printf("Last Error Category: %d\n", (int)metrics.lastErrorCategory);
+  Serial.println("========================\n");
+}
+
+void HttpClient::resetMetrics() {
+  metrics.totalRequests = 0;
+  metrics.successfulRequests = 0;
+  metrics.sslErrors = 0;
+  metrics.timeoutErrors = 0;
+  metrics.lastErrorTime = 0;
+  metrics.lastErrorCategory = ErrorCategory::UNKNOWN;
+  
+  // Reset intelligent logging
+  metrics.lastLogTime = 0;
+  metrics.errorCountSinceLastLog = 0;
+  metrics.suppressRepeatedErrors = false;
+}
+
+float HttpClient::getSuccessRate() const {
+  if (metrics.totalRequests == 0) return 100.0f;
+  return (float)metrics.successfulRequests / metrics.totalRequests * 100.0f;
+}
+
+void HttpClient::logErrorIntelligently(const String& message, ErrorCategory category) {
+  uint32_t currentTime = millis();
+  
+  // Check if we should log this error
+  if (!shouldLogError(category)) {
+    metrics.errorCountSinceLastLog++;
+    return;
+  }
+  
+  // Reset suppression if it's been more than 30 seconds
+  if ((currentTime - metrics.lastLogTime) >= 30000) {
+    metrics.suppressRepeatedErrors = false;
+  }
+  
+  // Log the error
+  Serial.printf("[HTTP] %s", message.c_str());
+  
+  // If we've been suppressing errors, show the count
+  if (metrics.errorCountSinceLastLog > 0) {
+    Serial.printf(" (suppressed %lu similar errors)", metrics.errorCountSinceLastLog);
+  }
+  Serial.println();
+  
+  // Update logging state
+  metrics.lastLogTime = currentTime;
+  metrics.errorCountSinceLastLog = 0;
+  metrics.suppressRepeatedErrors = true;
+}
+
+bool HttpClient::shouldLogError(ErrorCategory category) const {
+  uint32_t currentTime = millis();
+  
+  // Always log the first error
+  if (metrics.lastLogTime == 0) {
+    return true;
+  }
+  
+  // Don't log if we're suppressing repeated errors and it's been less than 30 seconds
+  if (metrics.suppressRepeatedErrors && (currentTime - metrics.lastLogTime) < 30000) {
+    return false;
+  }
+  
+  // Reset suppression after 30 seconds
+  if ((currentTime - metrics.lastLogTime) >= 30000) {
+    return true;
+  }
+  
+  return true;
 }

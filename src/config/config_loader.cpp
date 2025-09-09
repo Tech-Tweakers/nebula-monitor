@@ -335,6 +335,20 @@ String ConfigLoader::getNtpServer() {
   return getValue("NTP_SERVER", "pool.ntp.org");
 }
 
+// Health Check Configuration
+String ConfigLoader::getHealthCheckHealthyPatterns() {
+  return getValue("HEALTH_CHECK_HEALTHY_PATTERNS", "\"status\":\"healthy\",\"status\":\"ok\",\"status\":\"up\",\"status\":\"running\",\"health\":\"ok\",\"health\":\"healthy\",\"health\":\"up\",\"ok\",\"healthy\",\"up\"");
+}
+
+String ConfigLoader::getHealthCheckUnhealthyPatterns() {
+  return getValue("HEALTH_CHECK_UNHEALTHY_PATTERNS", "\"status\":\"unhealthy\",\"status\":\"down\",\"status\":\"error\",\"status\":\"failed\",\"health\":\"unhealthy\",\"health\":\"down\",\"502 bad gateway\",\"503 service unavailable\",\"504 gateway timeout\",\"500 internal server error\"");
+}
+
+bool ConfigLoader::isHealthCheckStrictMode() {
+  String value = getValue("HEALTH_CHECK_STRICT_MODE", "false");
+  return value.equalsIgnoreCase("true");
+}
+
 void ConfigLoader::printAllConfigs() {
   Serial.println("[CONFIG] === All Configuration Settings ===");
   for (int i = 0; i < configCount; i++) {

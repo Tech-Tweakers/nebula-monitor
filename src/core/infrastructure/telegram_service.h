@@ -1,5 +1,6 @@
 #pragma once
 #include "core/domain/alert.h"
+#include "ssl_mutex_manager.h"
 #include <Arduino.h>
 
 class TelegramService {
