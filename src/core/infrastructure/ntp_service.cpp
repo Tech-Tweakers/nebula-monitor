@@ -21,16 +21,22 @@ bool NTPService::initialize() {
   // Setup NTP client
   setupNTPClient();
   
-  // Initial time sync
-  if (syncTime()) {
-    initialized = true;
-    lastSync = millis();
-    Serial.println("[NTP] Service initialized successfully!");
-    return true;
-  } else {
-    Serial.println("[NTP] ERROR: Failed to sync time!");
-    return false;
+  // Try multiple times to sync time
+  int attempts = 0;
+  while (attempts < 3) {
+    if (syncTime()) {
+      initialized = true;
+      lastSync = millis();
+      Serial.println("[NTP] Service initialized successfully!");
+      return true;
+    }
+    attempts++;
+    Serial.printf("[NTP] Sync attempt %d failed, retrying...\n", attempts);
+    delay(2000); // Wait 2 seconds before retry
   }
+  
+  Serial.println("[NTP] ERROR: Failed to sync time after 3 attempts!");
+  return false;
 }
 
 void NTPService::cleanup() {
@@ -87,6 +93,31 @@ String NTPService::getCurrentTime() {
   // Check if we need to sync
   if (millis() - lastSync > SYNC_INTERVAL_MS) {
     syncTime();
+  }
+  
+  // Check if time is actually set and valid
+  if (!timeClient->isTimeSet() || timeClient->getEpochTime() < 1600000000) { // Before 2020
+    // Try to sync one more time
+    if (syncTime()) {
+      unsigned long epochTime = timeClient->getEpochTime();
+      return formatTime(epochTime);
+    } else {
+      // Fallback to uptime if sync fails
+      unsigned long now = millis();
+      unsigned long hours = (now / 3600000) % 24;
+      unsigned long minutes = (now / 60000) % 60;
+      unsigned long seconds = (now / 1000) % 60;
+      
+      String timeStr = "";
+      if (hours < 10) timeStr += "0";
+      timeStr += String(hours) + ":";
+      if (minutes < 10) timeStr += "0";
+      timeStr += String(minutes) + ":";
+      if (seconds < 10) timeStr += "0";
+      timeStr += String(seconds);
+      
+      return timeStr + " (uptime)";
+    }
   }
   
   unsigned long epochTime = timeClient->getEpochTime();
