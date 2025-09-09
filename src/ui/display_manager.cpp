@@ -259,8 +259,6 @@ void DisplayManager::handleTouch() {
     lv_area_t footer_area;
     lv_obj_get_coords(footer, &footer_area);
     if (x >= footer_area.x1 && x < footer_area.x2 && y >= footer_area.y1 && y < footer_area.y2) {
-      Serial.printf("[DISPLAY] Touch detected on footer: x=%d, y=%d, area=(%d,%d,%d,%d)\n", 
-                   x, y, footer_area.x1, footer_area.y1, footer_area.x2, footer_area.y2);
       onFooterTouched();
       return;
     }
@@ -280,15 +278,12 @@ void DisplayManager::handleTouch() {
 }
 
 void DisplayManager::onFooterTouched() {
-  Serial.printf("[DISPLAY] Footer touched! Current mode: %d\n", footer_mode);
   cycleFooterMode();
-  Serial.printf("[DISPLAY] Footer mode changed to: %d\n", footer_mode);
 }
 
 void DisplayManager::onStatusItemTouched(int index) {
   if (index < 0 || index >= targetCount) return;
   
-  Serial.printf("[DISPLAY] Status item %d touched: %s\n", index, targets[index].getName().c_str());
   // Could show detail window here
 }
 

@@ -7,6 +7,7 @@ bool TouchHandler::initialized = false;
 bool TouchHandler::initialize() {
   if (initialized) return true;
   
+  Serial.println("[TOUCH] Initializing touch handler...");
   
   // Setup SPI
   setupSPI();
@@ -15,6 +16,7 @@ bool TouchHandler::initialize() {
   setupTouchscreen();
   
   initialized = true;
+  Serial.println("[TOUCH] Touch handler initialized successfully!");
   
   return true;
 }
@@ -94,6 +96,7 @@ void TouchHandler::setupSPI() {
   }
   
   touchscreenSPI->begin(T_SCK, T_MISO, T_MOSI, T_CS);
+  Serial.println("[TOUCH] SPI initialized");
 }
 
 void TouchHandler::setupTouchscreen() {
@@ -105,4 +108,5 @@ void TouchHandler::setupTouchscreen() {
   touchscreen->begin(*touchscreenSPI);
   touchscreen->setRotation(2); // Landscape rotation
   
+  Serial.printf("[TOUCH] Touchscreen initialized - CS:%d IRQ:%d\n", T_CS, T_IRQ);
 }
