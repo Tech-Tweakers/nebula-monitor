@@ -11,8 +11,13 @@ Sketch para copiar `config.env` do SPIFFS para o SD Card sem modificações.
 2. **Compilar e upload:**
    ```bash
    cd sd_config_uploader
-   pio run -e esp32dev --target uploadfs  # Upload do config.env para SPIFFS
-   pio run -e esp32dev --target upload    # Upload do sketch
+   
+   # Opção 1: Upload automático (recomendado)
+   ./upload_when_ready.sh
+   
+   # Opção 2: Upload manual
+   pio run --target uploadfs  # Upload do config.env para SPIFFS
+   pio run --target upload    # Upload do sketch
    ```
 
 3. **Executar:**

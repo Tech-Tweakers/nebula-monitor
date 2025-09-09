@@ -29,7 +29,7 @@ void setup() {
     if (configFile) {
       while (configFile.available()) {
         String line = configFile.readStringUntil('\n');
-        if (line.indexOf("LED_PIN") != -1) {
+        if (line.indexOf("TARGET") != -1) {
           Serial.println(line);
         }
       }
