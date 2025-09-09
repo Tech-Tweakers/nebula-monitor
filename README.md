@@ -322,10 +322,6 @@ MIT License - see [LICENSE](LICENSE) file for details.
 
 <div align="center">
 
-**🌌 Nebula Monitor v2.4** - *Clean architecture network monitoring with 24/7 stability*
-
 Made with ❤️ for the ESP32 community
-
-**🚀 Now with Manual Garbage Collection, SSL Thread Safety, and Dynamic Footer!**
 
 </div>
