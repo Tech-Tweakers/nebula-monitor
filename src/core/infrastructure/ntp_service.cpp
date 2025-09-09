@@ -71,6 +71,31 @@ bool NTPService::syncTime() {
   }
 }
 
+bool NTPService::syncTimeIfNeeded() {
+  if (!initialized || !timeClient) {
+    return false;
+  }
+  
+  unsigned long now = millis();
+  
+  // Check if we need to sync based on interval
+  if (now - lastSync > SYNC_INTERVAL_MS) {
+    return syncTime();
+  }
+  
+  // Check if time seems invalid (before 2020 or not set)
+  if (!timeClient->isTimeSet() || timeClient->getEpochTime() < 1600000000) {
+    // Only sync if minimum interval has passed to avoid spam
+    if (now - lastSync > MIN_SYNC_INTERVAL_MS) {
+      Serial.println("[NTP] Time seems invalid, attempting sync...");
+      return syncTime();
+    }
+  }
+  
+  // No sync needed
+  return true;
+}
+
 String NTPService::getCurrentTime() {
   if (!initialized || !timeClient) {
     // Fallback to uptime if NTP not available
@@ -90,10 +115,8 @@ String NTPService::getCurrentTime() {
     return timeStr + " (uptime)";
   }
   
-  // Check if we need to sync
-  if (millis() - lastSync > SYNC_INTERVAL_MS) {
-    syncTime();
-  }
+  // Use smart sync - only sync if really needed
+  syncTimeIfNeeded();
   
   // Check if time is actually set and valid
   if (!timeClient->isTimeSet() || timeClient->getEpochTime() < 1600000000) { // Before 2020
