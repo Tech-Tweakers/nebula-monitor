@@ -205,7 +205,7 @@ String NTPService::getCurrentTime() {
 }
 
 String NTPService::getFormattedTime() {
-  if (!initialized || !timeClient) {
+  if (!timeClient) {
     return "NTP not available";
   }
   
