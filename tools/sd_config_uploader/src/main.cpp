@@ -65,7 +65,7 @@ ALL_LOGS_ENABLED=false
 # Formato: NAME|URL|HEALTH_ENDPOINT|MONITOR_TYPE
 # Monitor types: PING, HEALTH_CHECK
 # Exemplo: Proxmox HV|http://192.168.1.128:8006/||PING
-TARGET_1=Proxmox VM HV|http://192.168.1.128:8006/||PING
+TARGET_1=Proxmox NEW|http://192.168.1.128:8006/||PING
 TARGET_2=Router #1|http://192.168.1.1||PING
 TARGET_3=Router #2|https://192.168.1.172||PING
 TARGET_4=Polaris API|https://marker-unfortunately-practices-rapid.trycloudflare.com|/health|HEALTH_CHECK
