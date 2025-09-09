@@ -147,18 +147,21 @@ bool SDCardManager::syncConfigToSD() {
 
 bool SDCardManager::isSDConfigNewer() {
   if (!isSDCardAvailable() || !SD.exists(CONFIG_FILENAME)) {
+    Serial.println("[SDCARD] DEBUG: SD not available or config not found");
     return false;
   }
   
   // Open SD file
   File sdFile = SD.open(CONFIG_FILENAME, FILE_READ);
   if (!sdFile) {
+    Serial.println("[SDCARD] DEBUG: Failed to open SD file");
     return false;
   }
   
   // Open SPIFFS file
   File spiffsFile = SPIFFS.open(CONFIG_FILENAME, FILE_READ);
   if (!spiffsFile) {
+    Serial.println("[SDCARD] DEBUG: SPIFFS file not found, SD is newer");
     sdFile.close();
     return true; // SD exists but SPIFFS doesn't
   }
@@ -167,17 +170,24 @@ bool SDCardManager::isSDConfigNewer() {
   size_t sdSize = sdFile.size();
   size_t spiffsSize = spiffsFile.size();
   
+  Serial.printf("[SDCARD] DEBUG: File sizes - SD=%d, SPIFFS=%d\n", sdSize, spiffsSize);
+  
   sdFile.close();
   spiffsFile.close();
   
   // If sizes are different, assume SD is newer if it's larger
   if (sdSize != spiffsSize) {
     Serial.printf("[SDCARD] Size difference: SD=%d, SPIFFS=%d\n", sdSize, spiffsSize);
-    return sdSize > spiffsSize;
+    bool isNewer = sdSize > spiffsSize;
+    Serial.printf("[SDCARD] DEBUG: SD is %s based on size\n", isNewer ? "newer" : "older");
+    return isNewer;
   }
   
   // If sizes are the same, compare content hash
-  return compareFileContent();
+  Serial.println("[SDCARD] DEBUG: Same size, comparing content...");
+  bool isNewer = compareFileContent();
+  Serial.printf("[SDCARD] DEBUG: SD is %s based on content\n", isNewer ? "newer" : "older");
+  return isNewer;
 }
 
 bool SDCardManager::compareFileContent() {
@@ -186,6 +196,7 @@ bool SDCardManager::compareFileContent() {
   File spiffsFile = SPIFFS.open(CONFIG_FILENAME, FILE_READ);
   
   if (!sdFile || !spiffsFile) {
+    Serial.println("[SDCARD] DEBUG: Failed to open files for content comparison");
     if (sdFile) sdFile.close();
     if (spiffsFile) spiffsFile.close();
     return false;
@@ -194,33 +205,50 @@ bool SDCardManager::compareFileContent() {
   // Compare content byte by byte
   uint8_t sdBuffer[512];
   uint8_t spiffsBuffer[512];
+  size_t bytesCompared = 0;
   
   while (sdFile.available() && spiffsFile.available()) {
     size_t sdBytes = sdFile.read(sdBuffer, sizeof(sdBuffer));
     size_t spiffsBytes = spiffsFile.read(spiffsBuffer, sizeof(spiffsBuffer));
     
     if (sdBytes != spiffsBytes) {
+      Serial.printf("[SDCARD] DEBUG: Different read sizes: SD=%d, SPIFFS=%d\n", sdBytes, spiffsBytes);
       sdFile.close();
       spiffsFile.close();
       return true; // Different sizes, assume SD is newer
     }
     
     if (memcmp(sdBuffer, spiffsBuffer, sdBytes) != 0) {
+      Serial.printf("[SDCARD] DEBUG: Content differs at byte %d\n", bytesCompared);
       sdFile.close();
       spiffsFile.close();
       return true; // Different content, assume SD is newer
     }
+    
+    bytesCompared += sdBytes;
   }
   
   // Check if one file has more data
   bool sdHasMore = sdFile.available() > 0;
   bool spiffsHasMore = spiffsFile.available() > 0;
   
+  Serial.printf("[SDCARD] DEBUG: Compared %d bytes, SD has more: %s, SPIFFS has more: %s\n", 
+                bytesCompared, sdHasMore ? "yes" : "no", spiffsHasMore ? "yes" : "no");
+  
   sdFile.close();
   spiffsFile.close();
   
   // If SD has more data, it's newer
-  return sdHasMore && !spiffsHasMore;
+  bool isNewer = sdHasMore && !spiffsHasMore;
+  if (isNewer) {
+    Serial.println("[SDCARD] DEBUG: SD has more data, considering newer");
+  } else if (!sdHasMore && !spiffsHasMore) {
+    Serial.println("[SDCARD] DEBUG: Files are identical");
+  } else {
+    Serial.println("[SDCARD] DEBUG: SPIFFS has more data, considering older");
+  }
+  
+  return isNewer;
 }
 
 time_t SDCardManager::getFileModTime(File& file) {
