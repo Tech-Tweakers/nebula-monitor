@@ -31,5 +31,6 @@ public:
 private:
   // Internal methods
   static void setupNTPClient();
+  static void setupNTPClientWithServer(const char* server);
   static String formatTime(unsigned long epochTime);
 };

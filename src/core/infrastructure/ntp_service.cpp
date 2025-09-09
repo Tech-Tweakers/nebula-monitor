@@ -18,24 +18,39 @@ bool NTPService::initialize() {
     return false;
   }
   
-  // Setup NTP client
-  setupNTPClient();
+  // Try multiple NTP servers
+  const char* ntpServers[] = {
+    "pool.ntp.org",
+    "time.google.com", 
+    "time.cloudflare.com",
+    "time.nist.gov"
+  };
   
-  // Try multiple times to sync time
-  int attempts = 0;
-  while (attempts < 3) {
-    if (syncTime()) {
-      initialized = true;
-      lastSync = millis();
-      Serial.println("[NTP] Service initialized successfully!");
-      return true;
+  for (int serverIndex = 0; serverIndex < 4; serverIndex++) {
+    Serial.printf("[NTP] Trying server %d: %s\n", serverIndex + 1, ntpServers[serverIndex]);
+    
+    // Setup NTP client with current server
+    setupNTPClientWithServer(ntpServers[serverIndex]);
+    
+    // Try multiple times to sync time
+    int attempts = 0;
+    while (attempts < 2) { // Reduced attempts per server
+      if (syncTime()) {
+        initialized = true;
+        lastSync = millis();
+        Serial.printf("[NTP] Service initialized successfully with %s!\n", ntpServers[serverIndex]);
+        return true;
+      }
+      attempts++;
+      Serial.printf("[NTP] Sync attempt %d failed, retrying...\n", attempts);
+      delay(1000); // Shorter delay
     }
-    attempts++;
-    Serial.printf("[NTP] Sync attempt %d failed, retrying...\n", attempts);
-    delay(2000); // Wait 2 seconds before retry
+    
+    Serial.printf("[NTP] Server %s failed, trying next...\n", ntpServers[serverIndex]);
+    delay(500); // Brief delay before next server
   }
   
-  Serial.println("[NTP] ERROR: Failed to sync time after 3 attempts!");
+  Serial.println("[NTP] ERROR: Failed to sync time with all servers!");
   return false;
 }
 
@@ -163,14 +178,36 @@ bool NTPService::isTimeSynced() {
 void NTPService::setupNTPClient() {
   // Get configuration
   String ntpServer = ConfigLoader::getNtpServer();
+  setupNTPClientWithServer(ntpServer.c_str());
+}
+
+void NTPService::setupNTPClientWithServer(const char* server) {
+  // Clean up existing client
+  if (timeClient) {
+    delete timeClient;
+    timeClient = nullptr;
+  }
+  if (ntpUDP) {
+    delete ntpUDP;
+    ntpUDP = nullptr;
+  }
+  
+  // Get timezone offset
   int timezoneOffset = ConfigLoader::getTimezoneOffset();
   
-  // Create UDP and NTP client
+  // Create UDP and NTP client with shorter timeout
   ntpUDP = new WiFiUDP();
-  timeClient = new NTPClient(*ntpUDP, ntpServer.c_str(), timezoneOffset, 60000);
+  timeClient = new NTPClient(*ntpUDP, server, timezoneOffset, 10000); // 10 second timeout
   
-  Serial.printf("[NTP] Configured: Server=%s, Offset=%d seconds\n", 
-               ntpServer.c_str(), timezoneOffset);
+  Serial.printf("[NTP] Configured: Server=%s, Offset=%d seconds, Timeout=10s\n", 
+               server, timezoneOffset);
+  
+  // Test UDP connection
+  if (ntpUDP->begin(123)) { // NTP port
+    Serial.println("[NTP] UDP port 123 opened successfully");
+  } else {
+    Serial.println("[NTP] WARNING: Failed to open UDP port 123");
+  }
 }
 
 String NTPService::formatTime(unsigned long epochTime) {
