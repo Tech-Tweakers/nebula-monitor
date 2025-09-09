@@ -186,6 +186,7 @@ String TelegramService::formatAlertMessage(const String& targetName, Status stat
     message += "🚨 <b>SYSTEM DOWN</b>\n\n";
     message += "🔴 <b>Target:</b> " + targetName + "\n";
     message += "📊 <b>Last Response:</b> " + String(latency) + "ms\n";
+    message += "🕐 <b>Detected:</b> " + getCurrentTime() + "\n";
     message += "⏱️ <b>Downtime:</b> " + formatTime(totalDowntime) + "\n";
     message += "⚠️ <b>Status:</b> Unreachable\n\n";
     message += "🔍 <b>Waiting for recovery...</b>";
