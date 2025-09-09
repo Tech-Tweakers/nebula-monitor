@@ -1,7 +1,10 @@
 #include "http_client.h"
+#include "config/config_loader.h"
+#include "memory_manager.h"
 
 HttpClient::HttpClient() {
   lastResponse = "";
+  lastHttpCode = -1;
   secureClient = nullptr;
   plainClient = nullptr;
   clientInitialized = false;
@@ -69,13 +72,22 @@ uint16_t HttpClient::healthCheck(const String& url, const String& endpoint, uint
   uint16_t latency = performRequestWithRetry(fullUrl, calculatedTimeout, "GET");
   
   if (latency > 0) {
+    // Check HTTP status code first
+    if (lastHttpCode < 200 || lastHttpCode >= 300) {
+      Serial.printf("[HTTP] Health check failed: HTTP %d\n", lastHttpCode);
+      return 0;
+    }
+    
     // Enhanced health response validation
     if (lastResponse.length() > 0 && lastResponse.length() < 1000) {
       if (!isHealthyResponse(lastResponse)) {
-        Serial.println("[HTTP] Health check failed: Unhealthy response detected");
+        Serial.printf("[HTTP] Health check failed: Unhealthy response detected (HTTP %d)\n", lastHttpCode);
         return 0;
       }
     }
+    
+    // Log successful health check with details
+    Serial.printf("[HTTP] Health check successful: %d ms (HTTP %d)\n", latency, lastHttpCode);
   }
   
   return latency;
@@ -96,25 +108,68 @@ String HttpClient::post(const String& url, const String& data, uint16_t timeout)
 bool HttpClient::isHealthyResponse(const String& response) const {
   if (response.length() == 0) return false;
   
+  // Convert to lowercase for case-insensitive comparison
+  String lowerResponse = response;
+  lowerResponse.toLowerCase();
+  
+  // Get configuration patterns
+  String unhealthyPatterns = ConfigLoader::getHealthCheckUnhealthyPatterns();
+  String healthyPatterns = ConfigLoader::getHealthCheckHealthyPatterns();
+  bool strictMode = ConfigLoader::isHealthCheckStrictMode();
+  
   // Check for explicit unhealthy indicators first
-  if (response.indexOf("\"status\":\"unhealthy\"") > 0 || 
-      response.indexOf("\"status\":\"down\"") > 0 ||
-      response.indexOf("502 Bad Gateway") > 0 ||
-      response.indexOf("503 Service Unavailable") > 0 ||
-      response.indexOf("504 Gateway Timeout") > 0) {
-    return false;
+  int start = 0;
+  while (start < unhealthyPatterns.length()) {
+    int end = unhealthyPatterns.indexOf(',', start);
+    if (end == -1) end = unhealthyPatterns.length();
+    
+    String pattern = unhealthyPatterns.substring(start, end);
+    pattern.trim();
+    if (pattern.length() > 0 && lowerResponse.indexOf(pattern) >= 0) {
+      return false;
+    }
+    start = end + 1;
   }
   
   // Check for explicit healthy indicators
-  if (response.indexOf("\"status\":\"healthy\"") > 0 ||
-      response.indexOf("\"status\":\"ok\"") > 0 ||
-      response.indexOf("\"health\":\"ok\"") > 0) {
+  start = 0;
+  while (start < healthyPatterns.length()) {
+    int end = healthyPatterns.indexOf(',', start);
+    if (end == -1) end = healthyPatterns.length();
+    
+    String pattern = healthyPatterns.substring(start, end);
+    pattern.trim();
+    if (pattern.length() > 0 && lowerResponse.indexOf(pattern) >= 0) {
+      return true;
+    }
+    start = end + 1;
+  }
+  
+  // Check for simple success responses
+  if (lowerResponse == "ok" || 
+      lowerResponse == "healthy" || 
+      lowerResponse == "up" ||
+      lowerResponse == "running" ||
+      lowerResponse == "{\"ok\":true}" ||
+      lowerResponse == "{\"status\":\"ok\"}" ||
+      lowerResponse == "{\"health\":\"ok\"}") {
     return true;
   }
   
+  // In strict mode, require explicit health indicators
+  if (strictMode) {
+    return false;
+  }
+  
   // For responses without explicit health indicators, 
-  // only consider healthy if it's a short response (likely a simple OK)
-  if (response.length() < 100) {
+  // consider healthy if it's a short response (likely a simple status)
+  if (response.length() < 200) {
+    // Additional check: if it contains JSON-like structure, be more strict
+    if (response.indexOf("{") >= 0 && response.indexOf("}") >= 0) {
+      // It's JSON but doesn't have clear health indicators, consider unhealthy
+      return false;
+    }
+    // Simple text response, consider healthy
     return true;
   }
   
@@ -137,6 +192,12 @@ void HttpClient::clearHeaders() {
 uint16_t HttpClient::performRequest(const String& url, uint16_t timeout, const String& method, const String& data) {
   if (WiFi.status() != WL_CONNECTED) {
     Serial.println("[HTTP] WiFi not connected");
+    return 0;
+  }
+  
+  // Check memory before proceeding
+  if (MemoryManager::getInstance().isMemoryCritical()) {
+    Serial.println("[HTTP] ERROR: Critical memory condition, skipping request");
     return 0;
   }
   
@@ -165,6 +226,8 @@ uint16_t HttpClient::performRequest(const String& url, uint16_t timeout, const S
   
   // Clear last response to free memory
   lastResponse = "";
+  lastResponse.reserve(0); // Force memory deallocation
+  lastHttpCode = -1;
   
   if (isHttpsUrl(url)) {
     WiFiClientSecure client;
@@ -189,6 +252,10 @@ uint16_t HttpClient::performRequest(const String& url, uint16_t timeout, const S
         } else {
           lastResponse = response;
         }
+        
+        // Force cleanup of temporary response
+        response = "";
+        response.reserve(0);
       }
       http.end();
     }
@@ -214,10 +281,17 @@ uint16_t HttpClient::performRequest(const String& url, uint16_t timeout, const S
         } else {
           lastResponse = response;
         }
+        
+        // Force cleanup of temporary response
+        response = "";
+        response.reserve(0);
       }
       http.end();
     }
   }
+  
+  // Save the HTTP code for later retrieval
+  lastHttpCode = httpCode;
   
   uint32_t duration = millis() - startTime;
   Serial.printf("[HTTP] %s -> code=%d (%lums)\n", url.c_str(), httpCode, (unsigned long)duration);

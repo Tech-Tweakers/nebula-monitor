@@ -25,6 +25,7 @@ class HttpClient {
 private:
   HTTPClient http;
   String lastResponse;
+  int lastHttpCode;
   
   // Performance metrics
   struct Metrics {
@@ -58,6 +59,7 @@ public:
   
   // Response handling
   String getLastResponse() const { return lastResponse; }
+  int getLastHttpCode() const { return lastHttpCode; }
   bool isHealthyResponse(const String& response) const;
   
   // Enhanced utility methods

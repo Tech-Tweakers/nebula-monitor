@@ -1,6 +1,7 @@
 #include "tasks/task_manager.h"
 #include "core/application/network_monitor.h"
 #include "ui/display_manager.h"
+#include "core/infrastructure/memory_manager.h"
 #include <Arduino.h>
 
 // Static member definitions
@@ -176,10 +177,13 @@ void TaskManager::scannerTask(void* pv) {
   
   UBaseType_t stackHighWaterMark = 0;
   uint32_t lastStackCheck = 0;
+  uint32_t lastMemoryCheck = 0;
   
   for (;;) {
+    uint32_t now = millis();
+    
     // Monitor stack usage every 30 seconds
-    if (millis() - lastStackCheck > 30000) {
+    if (now - lastStackCheck > 30000) {
       stackHighWaterMark = uxTaskGetStackHighWaterMark(nullptr);
       Serial.printf("[SCANNER_TASK] Stack high water mark: %d bytes\n", stackHighWaterMark * sizeof(StackType_t));
       
@@ -187,8 +191,20 @@ void TaskManager::scannerTask(void* pv) {
         Serial.println("[SCANNER_TASK] WARNING: Low stack space!");
       }
       
-      lastStackCheck = millis();
+      lastStackCheck = now;
     }
+    
+    // Check memory every 10 seconds
+    if (now - lastMemoryCheck > 10000) {
+      if (MemoryManager::getInstance().isMemoryLow()) {
+        Serial.println("[SCANNER_TASK] Low memory detected, triggering GC");
+        MemoryManager::getInstance().forceGarbageCollection();
+      }
+      lastMemoryCheck = now;
+    }
+    
+    // Feed watchdog
+    MemoryManager::getInstance().feedWatchdog();
     
     // Update network monitor
     if (networkMonitor) {

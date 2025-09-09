@@ -164,7 +164,7 @@ void NetworkMonitor::scanTarget(int index) {
   
   if (target.getMonitorType() == HEALTH_CHECK) {
     // Use enhanced health check with intelligent timeout and retry
-    latency = performSafeHealthCheck(target.getUrl());
+    latency = performSafeHealthCheck(target.getUrl(), target.getHealthEndpoint());
   } else {
     // Enhanced ping with intelligent timeout
     latency = httpClient->ping(target.getUrl(), 0); // 0 = auto-calculate timeout
@@ -200,7 +200,7 @@ void NetworkMonitor::processScanResults() {
   // For now, it's handled in updateTargetStatus
 }
 
-uint16_t NetworkMonitor::performSafeHealthCheck(const String& url) {
+uint16_t NetworkMonitor::performSafeHealthCheck(const String& url, const String& endpoint) {
   if (!httpClient) return 0;
   
   // Enhanced URL safety checks
@@ -209,41 +209,52 @@ uint16_t NetworkMonitor::performSafeHealthCheck(const String& url) {
     return 0;
   }
   
-  Serial.printf("[NETWORK_MONITOR] Performing enhanced health check: %s\n", url.c_str());
+  Serial.printf("[NETWORK_MONITOR] Performing enhanced health check: %s%s\n", url.c_str(), endpoint.c_str());
   
   // Use the enhanced health check with intelligent timeout and retry logic
-  uint16_t latency = httpClient->healthCheck(url, "", 0); // 0 = auto-calculate timeout
+  uint16_t latency = httpClient->healthCheck(url, endpoint, 0); // 0 = auto-calculate timeout
   
   if (latency > 0) {
     // Get the response payload for verification
     String response = httpClient->getLastResponse();
+    int httpCode = httpClient->getLastHttpCode();
+    
     if (response.length() > 0 && response.length() < 1000) {
       // Enhanced response validation
       if (httpClient->isHealthyResponse(response)) {
-        Serial.printf("[NETWORK_MONITOR] Health check successful: %d ms\n", latency);
+        Serial.printf("[NETWORK_MONITOR] Health check successful: %d ms (HTTP %d)\n", latency, httpCode);
       } else {
-        Serial.println("[NETWORK_MONITOR] Health check FAILED: Unhealthy response detected");
+        Serial.printf("[NETWORK_MONITOR] Health check FAILED: Unhealthy response detected (HTTP %d)\n", httpCode);
+        Serial.printf("[NETWORK_MONITOR] Response: %s\n", response.c_str());
         return 0;
       }
     } else {
-      Serial.printf("[NETWORK_MONITOR] Health check successful: %d ms (no response validation)\n", latency);
+      Serial.printf("[NETWORK_MONITOR] Health check successful: %d ms (HTTP %d, no response validation)\n", latency, httpCode);
     }
   } else {
     // Check error category for better logging
     ErrorCategory errorCategory = httpClient->getLastErrorCategory();
+    int httpCode = httpClient->getLastHttpCode();
+    
     switch (errorCategory) {
       case ErrorCategory::SSL_ERROR:
-        Serial.println("[NETWORK_MONITOR] Health check failed: SSL/TLS error");
+        Serial.printf("[NETWORK_MONITOR] Health check failed: SSL/TLS error (HTTP %d)\n", httpCode);
         break;
       case ErrorCategory::TEMPORARY:
-        Serial.println("[NETWORK_MONITOR] Health check failed: Temporary network issue");
+        Serial.printf("[NETWORK_MONITOR] Health check failed: Temporary network issue (HTTP %d)\n", httpCode);
         break;
       case ErrorCategory::PERMANENT:
-        Serial.println("[NETWORK_MONITOR] Health check failed: Permanent error (404, etc)");
+        Serial.printf("[NETWORK_MONITOR] Health check failed: Permanent error (HTTP %d)\n", httpCode);
         break;
       default:
-        Serial.println("[NETWORK_MONITOR] Health check failed: Unknown error");
+        Serial.printf("[NETWORK_MONITOR] Health check failed: Unknown error (HTTP %d)\n", httpCode);
         break;
+    }
+    
+    // Log response details for debugging
+    String response = httpClient->getLastResponse();
+    if (response.length() > 0) {
+      Serial.printf("[NETWORK_MONITOR] Response: %s\n", response.c_str());
     }
   }
   

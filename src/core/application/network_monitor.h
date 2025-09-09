@@ -45,7 +45,7 @@ public:
   bool loadTargets();
   void scanTarget(int index);
   void updateTargetStatus(int index, Status status, uint16_t latency);
-  uint16_t performSafeHealthCheck(const String& url);
+  uint16_t performSafeHealthCheck(const String& url, const String& endpoint);
   
   // Getters
   int getTargetCount() const { return targetCount; }

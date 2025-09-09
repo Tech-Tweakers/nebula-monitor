@@ -1,6 +1,8 @@
 #include "telegram_service.h"
 #include "http_client.h"
 #include "../domain/alert.h"
+#include "ssl_mutex_manager.h"
+#include "memory_manager.h"
 #include <ArduinoJson.h>
 
 TelegramService::TelegramService() : enabled(false), sendingMessage(false) {
@@ -240,6 +242,20 @@ bool TelegramService::sendMessage(const String& message) {
     return false;
   }
 
+  // Use SSL mutex to prevent memory allocation conflicts
+  SSLLock sslLock(3000); // 3 second timeout
+  
+  if (!sslLock.isLocked()) {
+    Serial.println("[TELEGRAM] ERROR: Failed to acquire SSL lock!");
+    return false;
+  }
+
+  // Check available memory before proceeding
+  if (MemoryManager::getInstance().isMemoryLow()) {
+    Serial.println("[TELEGRAM] WARNING: Low memory, skipping message");
+    return false;
+  }
+
   HTTPClient http;
   String url = "https://api.telegram.org/bot" + botToken + "/sendMessage";
   
@@ -249,8 +265,9 @@ bool TelegramService::sendMessage(const String& message) {
   }
 
   http.addHeader("Content-Type", "application/json");
+  http.setTimeout(2000); // 2 second timeout
   
-  // Create JSON payload
+  // Create JSON payload with memory management
   DynamicJsonDocument doc(1024);
   doc["chat_id"] = chatId;
   doc["text"] = message;
@@ -259,12 +276,24 @@ bool TelegramService::sendMessage(const String& message) {
   String payload;
   serializeJson(doc, payload);
   
+  // Clear document to free memory
+  doc.clear();
+  
+  Serial.printf("[TELEGRAM] Sending message (heap: %d bytes)\n", ESP.getFreeHeap());
+  
   int httpResponseCode = http.POST(payload);
   http.end();
   
+  // Force cleanup of payload
+  payload = "";
+  payload.reserve(0);
+  
   if (httpResponseCode > 0) {
     if (httpResponseCode == 200) {
+      Serial.println("[TELEGRAM] Message sent successfully");
       return true;
+    } else {
+      Serial.printf("[TELEGRAM] HTTP error: %d\n", httpResponseCode);
     }
   } else {
     Serial.printf("[TELEGRAM] ERROR: HTTP request failed, code: %d\n", httpResponseCode);
@@ -279,9 +308,16 @@ bool TelegramService::isTimeForAlert(int targetIndex, bool isRecovery) const {
   }
 
   unsigned long now = millis();
+  unsigned long lastAlertTime = alerts[targetIndex]->getLastAlertTime();
   unsigned long cooldown = isRecovery ? ALERT_RECOVERY_COOLDOWN_MS : ALERT_COOLDOWN_MS;
   
-  return (now - alerts[targetIndex]->getLastAlertTime()) >= cooldown;
+  // If lastAlertTime is 0, it means no alert has been sent yet - allow immediate sending
+  if (lastAlertTime == 0) {
+    return true;
+  }
+  
+  unsigned long timeSinceLastAlert = now - lastAlertTime;
+  return timeSinceLastAlert >= cooldown;
 }
 
 bool TelegramService::isHealthCheckHealthy(const String& response) const {
