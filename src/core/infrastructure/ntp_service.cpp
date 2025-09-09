@@ -48,18 +48,22 @@ bool NTPService::initialize() {
     // Try multiple times to sync time
     int attempts = 0;
     while (attempts < 2) { // Reduced attempts per server
+      Serial.printf("[NTP] Attempting sync with %s (attempt %d/2)...\n", ntpServers[serverIndex], attempts + 1);
+      
       if (syncTime()) {
         initialized = true;
         lastSync = millis();
-        Serial.printf("[NTP] Service initialized successfully with %s!\n", ntpServers[serverIndex]);
+        Serial.printf("[NTP] ✅ Service initialized successfully with %s!\n", ntpServers[serverIndex]);
         return true;
       }
       attempts++;
-      Serial.printf("[NTP] Sync attempt %d failed, retrying...\n", attempts);
-      delay(1000); // Shorter delay
+      Serial.printf("[NTP] ❌ Sync attempt %d failed with %s\n", attempts, ntpServers[serverIndex]);
+      if (attempts < 2) {
+        delay(1000); // Shorter delay
+      }
     }
     
-    Serial.printf("[NTP] Server %s failed, trying next...\n", ntpServers[serverIndex]);
+    Serial.printf("[NTP] ⚠️ Server %s failed after 2 attempts, trying next...\n", ntpServers[serverIndex]);
     delay(500); // Brief delay before next server
   }
   
