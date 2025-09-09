@@ -3,7 +3,7 @@
 > **ESP32 TFT Network Monitor Dashboard** - Clean architecture network monitoring with manual garbage collection, SSL thread safety, and 24/7 stability
 
 [![PlatformIO](https://img.shields.io/badge/PlatformIO-ESP32-blue.svg)](https://platformio.org/)
-[![LVGL](https://img.shields.io/badge/LVGL-8.4.0-green.svg)](https://lvgl.io/)
+[![LVGL](https://img.shields.io/badge/LVGL-8.3.11-green.svg)](https://lvgl.io/)
 [![TFT_eSPI](https://img.shields.io/badge/TFT_eSPI-Latest-orange.svg)](https://github.com/Bodmer/TFT_eSPI)
 [![Telegram](https://img.shields.io/badge/Telegram-Alerts-blue.svg)](https://telegram.org/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -73,21 +73,46 @@
 
 ## 🔧 Hardware Requirements
 
-- **ESP32 Development Board** (ESP32-DevKitC or similar)
-- **TFT Display**: ST7789 Driver (240x320 resolution)
-- **Touch Controller**: XPT2046 Resistive Touch
-- **Recommended**: Cheap Yellow Board (CYB) - pre-configured ESP32 + TFT module
+- **Board**: ESP32-2432S028R (new CYB/CYD variant)
+- **TFT Display**: ST7789 (240x320), rotation 2
+- **Touch Controller**: XPT2046 (resistive)
+- **Storage**: microSD (VSPI)
+- **Note**: This README is the canonical documentation for this newer CYB variant; use it as the reference.
 
 ### Pin Configuration
-| Component | ESP32 Pin | Function |
-|-----------|-----------|----------|
-| TFT_MOSI | GPIO 13 | SPI Data |
-| TFT_SCLK | GPIO 14 | SPI Clock |
-| TFT_CS | GPIO 15 | Chip Select |
-| TFT_DC | GPIO 2 | Data/Command |
-| TFT_BL | GPIO 27 | Backlight |
-| TOUCH_CS | GPIO 33 | Touch Select |
-| TOUCH_IRQ | GPIO 36 | Touch Interrupt |
+
+SPI buses:
+- HSPI (TFT + Touch, shared bus): MOSI=13, MISO=12, SCLK=14
+- VSPI (SD card): MOSI=23, MISO=19, SCLK=18
+
+| Peripheral | Signal     | ESP32 Pin | Notes                          |
+|------------|------------|-----------|--------------------------------|
+| TFT (HSPI) | MOSI       | GPIO 13   |                                |
+|            | MISO       | GPIO 12   |                                |
+|            | SCLK       | GPIO 14   |                                |
+|            | CS         | GPIO 15   | `TFT_CS`                       |
+|            | DC         | GPIO 2    | `TFT_DC`                       |
+|            | RST        | NC (-1)   | Not connected                  |
+|            | Backlight  | GPIO 27   | `TFT_BL` (active HIGH)         |
+| Touch      | MOSI       | GPIO 13   | Shared HSPI                    |
+| (XPT2046)  | MISO       | GPIO 12   | Shared HSPI                    |
+|            | SCLK       | GPIO 14   | Shared HSPI                    |
+|            | CS         | GPIO 33   | `TOUCH_CS`                     |
+|            | IRQ        | GPIO 36   | `TOUCH_IRQ`                    |
+| SD Card    | MOSI       | GPIO 23   | VSPI                           |
+|            | MISO       | GPIO 19   | VSPI                           |
+|            | SCLK       | GPIO 18   | VSPI                           |
+|            | CS         | GPIO 5    | `SD_CS`                        |
+| RGB LED    | R          | GPIO 16   | Default; configurable in env   |
+|            | G          | GPIO 17   | Default; configurable in env   |
+|            | B          | GPIO 20   | Default; configurable in env   |
+
+Notes:
+- TFT and Touch share HSPI; each has its own CS.
+- SD uses VSPI with `CS=GPIO 5`.
+- Backlight on `GPIO 27` (active HIGH). TFT reset not connected (`TFT_RST=-1`).
+- LED defaults: R=16, G=17, B=20, active LOW (common anode). Overridable via `data/config.env`.
+- Configuration is provided via build flags in `platformio.ini` (`USER_SETUP_LOADED=1`); `include/User_Setup.h` is ignored.
 
 ## 📦 Dependencies
 
@@ -95,8 +120,8 @@
 lib_deps =
   TFT_eSPI                    # TFT display driver
   XPT2046_Touchscreen         # Touch controller
-  lvgl/lvgl@^8.4.0           # UI framework
-  ArduinoJson@^6.21.5         # JSON parsing
+  lvgl/lvgl@^8.3.11           # UI framework
+  ArduinoJson@^6.21.3         # JSON parsing
   HTTPClient@^2.0.0           # HTTP client
   WiFiClientSecure@^2.0.0     # HTTPS support
 ```
