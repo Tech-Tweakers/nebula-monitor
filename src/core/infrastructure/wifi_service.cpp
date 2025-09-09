@@ -28,6 +28,11 @@ bool WiFiService::initialize(const String& ssid, const String& password) {
   
   if (connected) {
     Serial.println("\n[WIFI] Connected successfully!");
+    
+    // Try to set DNS after connection (some routers override DNS)
+    WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE, IPAddress(8, 8, 8, 8), IPAddress(8, 8, 4, 4));
+    Serial.println("[WIFI] DNS reconfigured after connection");
+    
     printInfo();
   } else {
     Serial.println("\n[WIFI] Initial connection failed, will retry...");
@@ -126,4 +131,7 @@ void WiFiService::printInfo() const {
     getSubnetMask().c_str(),
     getDNSIP().c_str(),
     getRSSI());
+  
+  // Show configured DNS vs actual DNS
+  Serial.printf("[WIFI] Configured DNS: 8.8.8.8, 8.8.4.4 | Actual DNS: %s\n", getDNSIP().c_str());
 }
