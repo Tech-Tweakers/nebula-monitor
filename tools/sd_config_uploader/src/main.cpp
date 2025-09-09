@@ -30,17 +30,17 @@ void setup() {
   }
   Serial.println("[UPLOADER] SD Card inicializado com sucesso!");
   
-  // Verificar se config.env existe no SPIFFS
+  // Verificar se config.env existe no SPIFFS (na mesma pasta do sketch)
   if (!SPIFFS.exists("/config.env")) {
     Serial.println("[UPLOADER] ERRO: config.env não encontrado no SPIFFS!");
-    Serial.println("[UPLOADER] Execute primeiro: pio run --target uploadfs");
+    Serial.println("[UPLOADER] Certifique-se de que o arquivo está na pasta do uploader");
     return;
   }
   
-  // Abrir arquivo do SPIFFS
+  // Abrir arquivo do SPIFFS (que contém o config.env da pasta do uploader)
   File sourceFile = SPIFFS.open("/config.env", "r");
   if (!sourceFile) {
-    Serial.println("[UPLOADER] ERRO: Não foi possível abrir config.env do SPIFFS!");
+    Serial.println("[UPLOADER] ERRO: Não foi possível abrir config.env!");
     return;
   }
   
@@ -53,7 +53,7 @@ void setup() {
   }
   
   // Copiar arquivo byte por byte (sem modificações)
-  Serial.println("[UPLOADER] Copiando config.env do SPIFFS para o SD Card...");
+  Serial.println("[UPLOADER] Copiando config.env da pasta do uploader para o SD Card...");
   
   uint8_t buffer[512];
   size_t totalBytes = 0;
