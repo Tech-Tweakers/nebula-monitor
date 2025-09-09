@@ -87,8 +87,8 @@ void NTPService::cleanup() {
 }
 
 bool NTPService::syncTime() {
-  if (!initialized || !timeClient) {
-    Serial.println("[NTP] ERROR: Not initialized or no client!");
+  if (!timeClient) {
+    Serial.println("[NTP] ERROR: No NTP client available!");
     return false;
   }
   
