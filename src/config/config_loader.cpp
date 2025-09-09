@@ -154,10 +154,6 @@ bool ConfigLoader::isDebugLogsEnabled() {
   return value.equalsIgnoreCase("true");
 }
 
-bool ConfigLoader::isTouchLogsEnabled() {
-  String value = getValue("TOUCH_LOGS_ENABLED", "false");
-  return value.equalsIgnoreCase("true");
-}
 
 bool ConfigLoader::isAllLogsEnabled() {
   String value = getValue("ALL_LOGS_ENABLED", "true");

@@ -7,7 +7,6 @@ bool TouchHandler::initialized = false;
 bool TouchHandler::initialize() {
   if (initialized) return true;
   
-  Serial.println("[TOUCH] Initializing touch handler...");
   
   // Setup SPI
   setupSPI();
@@ -16,7 +15,6 @@ bool TouchHandler::initialize() {
   setupTouchscreen();
   
   initialized = true;
-  Serial.println("[TOUCH] Touch handler initialized successfully!");
   
   return true;
 }
@@ -92,23 +90,19 @@ void TouchHandler::mapRawToScreen(int16_t rawX, int16_t rawY, int16_t& screenX, 
 void TouchHandler::setupSPI() {
   touchscreenSPI = new SPIClass(HSPI);
   if (!touchscreenSPI) {
-    Serial.println("[TOUCH] ERROR: Failed to create SPI!");
     return;
   }
   
   touchscreenSPI->begin(T_SCK, T_MISO, T_MOSI, T_CS);
-  Serial.println("[TOUCH] SPI initialized");
 }
 
 void TouchHandler::setupTouchscreen() {
   touchscreen = new XPT2046_Touchscreen(T_CS, T_IRQ);
   if (!touchscreen) {
-    Serial.println("[TOUCH] ERROR: Failed to create touchscreen!");
     return;
   }
   
   touchscreen->begin(*touchscreenSPI);
   touchscreen->setRotation(2); // Landscape rotation
   
-  Serial.printf("[TOUCH] Touchscreen initialized - CS:%d IRQ:%d\n", T_CS, T_IRQ);
 }
