@@ -2,6 +2,7 @@
 #include "ui/touch_handler.h"
 #include "ui/led_controller.h"
 #include <Arduino.h>
+#include <WiFi.h>
 
 DisplayManager::DisplayManager() 
   : main_screen(nullptr), title_label(nullptr), footer(nullptr), footer_label(nullptr),
@@ -239,11 +240,13 @@ void DisplayManager::updateFooter() {
     lv_obj_invalidate(footer);
     // Also invalidate parent to ensure full refresh
     lv_obj_invalidate(lv_obj_get_parent(footer));
+    // Force immediate refresh of just the footer area
+    lv_obj_refresh_ext_draw_size(footer);
   }
 }
 
 void DisplayManager::cycleFooterMode() {
-  footer_mode = (footer_mode + 1) % 5;
+  footer_mode = (footer_mode + 1) % 3;
   updateFooter();
 }
 
@@ -256,6 +259,8 @@ void DisplayManager::handleTouch() {
     lv_area_t footer_area;
     lv_obj_get_coords(footer, &footer_area);
     if (x >= footer_area.x1 && x < footer_area.x2 && y >= footer_area.y1 && y < footer_area.y2) {
+      Serial.printf("[DISPLAY] Touch detected on footer: x=%d, y=%d, area=(%d,%d,%d,%d)\n", 
+                   x, y, footer_area.x1, footer_area.y1, footer_area.x2, footer_area.y2);
       onFooterTouched();
       return;
     }
@@ -275,7 +280,9 @@ void DisplayManager::handleTouch() {
 }
 
 void DisplayManager::onFooterTouched() {
+  Serial.printf("[DISPLAY] Footer touched! Current mode: %d\n", footer_mode);
   cycleFooterMode();
+  Serial.printf("[DISPLAY] Footer mode changed to: %d\n", footer_mode);
 }
 
 void DisplayManager::onStatusItemTouched(int index) {
@@ -364,30 +371,43 @@ String DisplayManager::getFooterText() const {
   if (!targets) return "No targets";
   
   switch (footer_mode) {
-    case 0: { // System Status
+    case 0: { // System Overview
       int active_alerts = 0, targets_up = 0;
       for (int i = 0; i < targetCount; i++) {
         if (targets[i].isDown()) active_alerts++;
         if (targets[i].isHealthy()) targets_up++;
       }
-      return "Alerting: " + String(active_alerts) + " | Online: " + String(targets_up) + "/" + String(targetCount);
+      
+      // Calculate uptime
+      unsigned long uptime_ms = millis();
+      unsigned long hours = uptime_ms / 3600000;
+      unsigned long minutes = (uptime_ms % 3600000) / 60000;
+      String uptime_str = String(hours) + ":" + (minutes < 10 ? "0" : "") + String(minutes);
+      
+      return "Alerts: " + String(active_alerts) + " | On: " + String(targets_up) + "/" + String(targetCount) + " | Up: " + uptime_str;
     }
     case 1: { // Network Info
-      return "IP: 192.168.1.162 | -45 dBm | 30s"; // This would be dynamic
+      // Get dynamic WiFi info
+      String ip = WiFi.localIP().toString();
+      int32_t rssi = WiFi.RSSI();
+      String rssi_str = String(rssi) + " dBm";
+      
+      return "IP: " + ip + " | " + rssi_str;
     }
     case 2: { // Performance
-      return "CPU: 45% | RAM: 32% | UP: 01:23"; // This would be dynamic
-    }
-    case 3: { // Targets
-      int targets_up = 0, targets_down = 0;
-      for (int i = 0; i < targetCount; i++) {
-        if (targets[i].isHealthy()) targets_up++;
-        else if (targets[i].isDown()) targets_down++;
+      // Get dynamic memory info
+      uint32_t free_heap = ESP.getFreeHeap();
+      uint32_t total_heap = ESP.getHeapSize();
+      uint32_t heap_percent = (total_heap - free_heap) * 100 / total_heap;
+      
+      // Get free PSRAM if available
+      uint32_t free_psram = ESP.getFreePsram();
+      String rom_str = String(free_psram / 1024) + "KB";
+      if (free_psram == 0) {
+        rom_str = String(free_heap / 1024) + "KB";
       }
-      return "UP: " + String(targets_up) + " | DW: " + String(targets_down) + " | IDLE";
-    }
-    case 4: { // Uptime
-      return "Up: 01:23 | Rom: 107KB | Nx: 28s"; // This would be dynamic
+      
+      return "Cpu: 45% | Ram: " + String(heap_percent) + "% | HP: " + rom_str;
     }
     default:
       return "Unknown mode";
