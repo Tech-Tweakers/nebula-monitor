@@ -52,23 +52,32 @@ void setup() {
     return;
   }
   
-  // Ler arquivo completo do SPIFFS
-  String configContent = sourceFile.readString();
+  // Copiar arquivo byte por byte (sem modificações)
+  Serial.println("[UPLOADER] Copiando config.env do SPIFFS para o SD Card...");
+  
+  uint8_t buffer[512];
+  size_t totalBytes = 0;
+  
+  while (sourceFile.available()) {
+    size_t bytesRead = sourceFile.read(buffer, sizeof(buffer));
+    if (bytesRead == 0) break;
+    
+    size_t bytesWritten = destFile.write(buffer, bytesRead);
+    if (bytesWritten != bytesRead) {
+      Serial.println("[UPLOADER] ERRO: Falha ao escrever no SD Card!");
+      sourceFile.close();
+      destFile.close();
+      return;
+    }
+    
+    totalBytes += bytesWritten;
+  }
+  
   sourceFile.close();
-  
-  // Modificar o conteúdo (mudar "Proxmox HV" para "Proxmox VM")
-  configContent.replace("Proxmox", "Proxmox VM");
-  
-  Serial.println("[UPLOADER] Modificando config.env (Proxmox HV -> Proxmox VM)...");
-  
-  // Escrever conteúdo modificado no SD
-  size_t bytesWritten = destFile.print(configContent);
-  size_t bytesRead = bytesWritten;
-  
   destFile.close();
   
   Serial.println();
-  Serial.printf("[UPLOADER] SUCESSO! %d bytes copiados para o SD Card!\n", bytesRead);
+  Serial.printf("[UPLOADER] SUCESSO! %d bytes copiados para o SD Card!\n", totalBytes);
   
   // Verificar se arquivo foi criado corretamente
   if (SD.exists("/config.env")) {
@@ -79,13 +88,11 @@ void setup() {
     }
   }
   
-  Serial.println("[UPLOADER] Configuração MODIFICADA e copiada com sucesso!");
-  Serial.println("[UPLOADER] Mudança: 'Proxmox HV' -> 'Proxmox VM'");
+  Serial.println("[UPLOADER] Configuração copiada com sucesso!");
   Serial.println("[UPLOADER] Agora você pode:");
   Serial.println("  1. Inserir o SD no ESP32 principal");
   Serial.println("  2. Executar o projeto principal");
-  Serial.println("  3. O ESP32 vai detectar a mudança e reiniciar!");
-  Serial.println("  4. Ver o target 'Proxmox VM' na tela!");
+  Serial.println("  3. O ESP32 vai detectar e sincronizar automaticamente!");
   Serial.println("========================================");
 }
 

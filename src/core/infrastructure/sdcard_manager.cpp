@@ -91,11 +91,8 @@ bool SDCardManager::syncConfigFromSD() {
   
   if (success) {
     Serial.println("[SDCARD] SUCCESS: Config synced from SD to SPIFFS!");
-    Serial.println("[SDCARD] System will restart to load new configuration...");
-    
-    // Restart system to load new config
-    delay(2000);
-    ESP.restart();
+    Serial.println("[SDCARD] New configuration loaded successfully!");
+    Serial.println("[SDCARD] No restart needed - config will be loaded on next scan cycle");
   } else {
     Serial.println("[SDCARD] ERROR: Failed to sync config from SD");
   }
@@ -166,20 +163,75 @@ bool SDCardManager::isSDConfigNewer() {
     return true; // SD exists but SPIFFS doesn't
   }
   
-  // Compare modification times
-  time_t sdTime = getFileModTime(sdFile);
-  time_t spiffsTime = getFileModTime(spiffsFile);
+  // Compare file sizes first (quick check)
+  size_t sdSize = sdFile.size();
+  size_t spiffsSize = spiffsFile.size();
   
   sdFile.close();
   spiffsFile.close();
   
-  return sdTime > spiffsTime;
+  // If sizes are different, assume SD is newer if it's larger
+  if (sdSize != spiffsSize) {
+    Serial.printf("[SDCARD] Size difference: SD=%d, SPIFFS=%d\n", sdSize, spiffsSize);
+    return sdSize > spiffsSize;
+  }
+  
+  // If sizes are the same, compare content hash
+  return compareFileContent();
+}
+
+bool SDCardManager::compareFileContent() {
+  // Open both files
+  File sdFile = SD.open(CONFIG_FILENAME, FILE_READ);
+  File spiffsFile = SPIFFS.open(CONFIG_FILENAME, FILE_READ);
+  
+  if (!sdFile || !spiffsFile) {
+    if (sdFile) sdFile.close();
+    if (spiffsFile) spiffsFile.close();
+    return false;
+  }
+  
+  // Compare content byte by byte
+  uint8_t sdBuffer[512];
+  uint8_t spiffsBuffer[512];
+  
+  while (sdFile.available() && spiffsFile.available()) {
+    size_t sdBytes = sdFile.read(sdBuffer, sizeof(sdBuffer));
+    size_t spiffsBytes = spiffsFile.read(spiffsBuffer, sizeof(spiffsBuffer));
+    
+    if (sdBytes != spiffsBytes) {
+      sdFile.close();
+      spiffsFile.close();
+      return true; // Different sizes, assume SD is newer
+    }
+    
+    if (memcmp(sdBuffer, spiffsBuffer, sdBytes) != 0) {
+      sdFile.close();
+      spiffsFile.close();
+      return true; // Different content, assume SD is newer
+    }
+  }
+  
+  // Check if one file has more data
+  bool sdHasMore = sdFile.available() > 0;
+  bool spiffsHasMore = spiffsFile.available() > 0;
+  
+  sdFile.close();
+  spiffsFile.close();
+  
+  // If SD has more data, it's newer
+  return sdHasMore && !spiffsHasMore;
 }
 
 time_t SDCardManager::getFileModTime(File& file) {
-  // For ESP32, we'll use file size as a proxy for modification time
-  // In a real implementation, you'd use file.getLastWrite() if available
-  return file.size();
+  // Try to get actual modification time first
+  if (file.getLastWrite()) {
+    return file.getLastWrite();
+  }
+  
+  // Fallback: use file size + current time as a rough indicator
+  // This is not perfect but better than just file size
+  return file.size() + millis() / 1000;
 }
 
 bool SDCardManager::copyFile(File& source, File& destination) {

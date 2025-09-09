@@ -1,6 +1,6 @@
 # SD Config Uploader
 
-Sketch temporário para copiar `config.env` do SPIFFS para o SD Card.
+Sketch para copiar `config.env` do SPIFFS para o SD Card sem modificações.
 
 ## Como usar:
 
@@ -16,10 +16,10 @@ Sketch temporário para copiar `config.env` do SPIFFS para o SD Card.
    - O sketch vai copiar automaticamente o config.env do SPIFFS para o SD
 
 3. **Resultado:**
-   - SD Card terá o arquivo `/config.env`
+   - SD Card terá o arquivo `/config.env` (cópia exata do SPIFFS)
    - Agora você pode editar no PC
    - Inserir no ESP32 principal
-   - O sistema vai detectar mudanças e reiniciar
+   - O sistema vai detectar e sincronizar automaticamente
 
 ## Requisitos:
 
@@ -29,6 +29,13 @@ Sketch temporário para copiar `config.env` do SPIFFS para o SD Card.
 ## Pinout:
 
 - SD CS: Pin 5 (mesmo do projeto principal)
+
+## Funcionalidades:
+
+- ✅ Copia arquivo byte por byte (sem modificações)
+- ✅ Verifica integridade da cópia
+- ✅ Logs detalhados do processo
+- ✅ Tratamento de erros robusto
 
 ## Depois de usar:
 

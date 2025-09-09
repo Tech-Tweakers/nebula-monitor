@@ -32,6 +32,9 @@ public:
   // Get file modification time
   time_t getFileModTime(File& file);
   
+  // Compare file content byte by byte
+  bool compareFileContent();
+  
   // Copy file from source to destination
   bool copyFile(File& source, File& destination);
   
