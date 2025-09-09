@@ -1,40 +1,32 @@
 # SD Config Uploader
 
-Sketch para copiar `config.env` do SPIFFS para o SD Card sem modificações.
+Sketch simples para escrever `config.env` diretamente no SD Card.
 
 ## Como usar:
 
-1. **Preparar config.env:**
-   - Edite o arquivo `config.env` na pasta do uploader
-   - Ou copie um config.env existente para esta pasta
+1. **Editar configuração:**
+   - Edite o `configContent` no arquivo `src/main.cpp`
+   - Modifique as configurações conforme necessário
 
 2. **Compilar e upload:**
    ```bash
    cd sd_config_uploader
-   
-   # Opção 1: Upload automático (recomendado)
-   ./upload_when_ready.sh
-   
-   # Opção 2: Upload manual
-   pio run --target uploadfs  # Upload do config.env para SPIFFS
    pio run --target upload    # Upload do sketch
    ```
 
 3. **Executar:**
    - Abrir monitor serial (115200 baud)
-   - O sketch vai copiar automaticamente o config.env do SPIFFS para o SD
+   - O sketch vai escrever o config.env diretamente no SD
 
 4. **Resultado:**
-   - SD Card terá o arquivo `/config.env` (cópia exata do config.env da pasta)
-   - Agora você pode editar no PC
+   - SD Card terá o arquivo `/config.env` com as configurações
    - Inserir no ESP32 principal
    - O sistema vai detectar e sincronizar automaticamente
 
 ## Requisitos:
 
 - SD Card inserido no ESP32
-- config.env na pasta `data/` do uploader
-- Execute `pio run --target uploadfs` para fazer upload do config.env para o SPIFFS
+- Apenas a biblioteca SD (sem SPIFFS)
 
 ## Pinout:
 
