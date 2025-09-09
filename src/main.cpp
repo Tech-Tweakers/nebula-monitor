@@ -10,6 +10,7 @@
 #include "core/infrastructure/telegram_service.h"
 #include "core/infrastructure/ssl_mutex_manager.h"
 #include "core/infrastructure/memory_manager.h"
+#include "core/infrastructure/ntp_service.h"
 #include "ui/display_manager.h"
 #include "ui/touch_handler.h"
 #include "ui/led_controller.h"
@@ -122,6 +123,17 @@ void setup() {
   String password = ConfigLoader::getWifiPassword();
   if (!wifiService->initialize(ssid, password)) {
     Serial.println("[MAIN] WARNING: WiFi initialization failed, will retry...");
+  }
+  
+  // Initialize NTP service (after WiFi)
+  if (WiFi.status() == WL_CONNECTED) {
+    if (NTPService::initialize()) {
+      Serial.println("[MAIN] NTP service initialized!");
+    } else {
+      Serial.println("[MAIN] WARNING: NTP service failed to initialize!");
+    }
+  } else {
+    Serial.println("[MAIN] WARNING: WiFi not connected, skipping NTP initialization");
   }
   
   // Initialize Telegram
