@@ -69,7 +69,9 @@ void TelegramService::sendAlert(int targetIndex, const String& targetName, Statu
   }
 
   sendingMessage = true;
-  String message = formatAlertMessage(targetName, status, latency);
+  // Get current downtime for DOWN alerts
+  unsigned long currentDowntime = alerts[targetIndex] ? alerts[targetIndex]->getDowntime() : 0;
+  String message = formatAlertMessage(targetName, status, latency, false, currentDowntime);
   
   if (sendMessage(message)) {
     if (alerts[targetIndex]) {
@@ -184,7 +186,7 @@ String TelegramService::formatAlertMessage(const String& targetName, Status stat
     message += "🚨 <b>SYSTEM DOWN</b>\n\n";
     message += "🔴 <b>Target:</b> " + targetName + "\n";
     message += "📊 <b>Last Response:</b> " + String(latency) + "ms\n";
-    message += "🕐 <b>Detected:</b> " + getCurrentTime() + "\n";
+    message += "⏱️ <b>Downtime:</b> " + formatTime(totalDowntime) + "\n";
     message += "⚠️ <b>Status:</b> Unreachable\n\n";
     message += "🔍 <b>Waiting for recovery...</b>";
   } else {
