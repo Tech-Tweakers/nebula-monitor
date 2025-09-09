@@ -232,16 +232,10 @@ String TelegramService::formatRecoveryMessage(const String& targetName, uint16_t
   // Format recovery time
   String recoveryTimeStr = getCurrentTime();
   
-  // Analytics section
-  message += "📊 <b>ANALYTICS</b>\n";
-  message += "━━━━━━━━━━━━━━━━\n";
   message += "🕐 <b>First Failure:</b> " + failureStartTime + "\n";
   message += "🚨 <b>Alert Started:</b> " + alertStartTimeStr + "\n";
   message += "✅ <b>Recovered At:</b> " + recoveryTimeStr + "\n\n";
   
-  // Summary section
-  message += "📈 <b>SUMMARY</b>\n";
-  message += "━━━━━━━━━━━━━━━━\n";
   message += "⏱️ <b>Total Downtime:</b> " + formatTime(totalDowntime) + "\n";
   message += "📊 <b>Current Latency:</b> " + String(latency) + "ms\n";
   message += "🔄 <b>Status:</b> Online\n\n";
