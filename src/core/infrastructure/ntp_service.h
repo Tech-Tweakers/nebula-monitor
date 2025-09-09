@@ -10,7 +10,8 @@ private:
   static NTPClient* timeClient;
   static bool initialized;
   static unsigned long lastSync;
-  static const unsigned long SYNC_INTERVAL_MS = 3600000; // 1 hour
+  static const unsigned long SYNC_INTERVAL_MS = 300000; // 5 minutes
+  static const unsigned long MIN_SYNC_INTERVAL_MS = 60000; // 1 minute minimum
   
 public:
   // Initialization
@@ -19,6 +20,7 @@ public:
   
   // Time management
   static bool syncTime();
+  static bool syncTimeIfNeeded(); // Smart sync with minimum interval
   static String getCurrentTime();
   static String getFormattedTime();
   static bool isTimeSynced();
@@ -29,5 +31,6 @@ public:
 private:
   // Internal methods
   static void setupNTPClient();
+  static void setupNTPClientWithServer(const char* server);
   static String formatTime(unsigned long epochTime);
 };

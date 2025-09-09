@@ -41,7 +41,10 @@ public:
 private:
   // Message formatting
   String formatAlertMessage(const String& targetName, Status status, uint16_t latency, bool isRecovery = false, unsigned long totalDowntime = 0);
+  String formatRecoveryMessage(const String& targetName, uint16_t latency, unsigned long totalDowntime, 
+                               unsigned long firstFailureTime, unsigned long alertStartTime);
   String formatTime(unsigned long seconds) const;
+  String formatMillisToTime(unsigned long millisTime) const;
   String getCurrentTime() const;
   
   // HTTP communication

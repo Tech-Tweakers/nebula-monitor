@@ -69,7 +69,9 @@ void TelegramService::sendAlert(int targetIndex, const String& targetName, Statu
   }
 
   sendingMessage = true;
-  String message = formatAlertMessage(targetName, status, latency);
+  // Get current downtime for DOWN alerts
+  unsigned long currentDowntime = alerts[targetIndex] ? alerts[targetIndex]->getDowntime() : 0;
+  String message = formatAlertMessage(targetName, status, latency, false, currentDowntime);
   
   if (sendMessage(message)) {
     if (alerts[targetIndex]) {
@@ -89,12 +91,18 @@ void TelegramService::sendRecoveryAlert(int targetIndex, const String& targetNam
   }
 
   sendingMessage = true;
-  String message = formatAlertMessage(targetName, UP, latency, true, 
-                                    alerts[targetIndex] ? alerts[targetIndex]->getDowntime() : 0);
+  
+  // Get alert timing information
+  Alert* alert = alerts[targetIndex];
+  unsigned long totalDowntime = alert ? alert->getDowntime() : 0;
+  unsigned long firstFailureTime = alert ? alert->getFirstFailureTime() : 0;
+  unsigned long alertStartTime = alert ? alert->getAlertDowntimeStart() : 0;
+  
+  String message = formatRecoveryMessage(targetName, latency, totalDowntime, firstFailureTime, alertStartTime);
   
   if (sendMessage(message)) {
-    if (alerts[targetIndex]) {
-      alerts[targetIndex]->markRecovered();
+    if (alert) {
+      alert->markRecovered();
     }
     Serial.printf("[TELEGRAM] Recovery alert sent for target %d (%s)\n", targetIndex, targetName.c_str());
   } else {
@@ -175,16 +183,16 @@ String TelegramService::formatAlertMessage(const String& targetName, Status stat
   String message = "";
   
   if (isRecovery) {
-    message += "🎉 <b>SYSTEM ONLINE</b>\n\n";
-    message += "🟢 <b>Target:</b> " + targetName + "\n";
+    message += "🟢 <b>SYSTEM ONLINE</b>\n\n";
+    message += "🎉 <b>Target:</b> " + targetName + "\n\n";
     message += "⏱️ <b>Downtime:</b> " + formatTime(totalDowntime) + "\n";
     message += "📊 <b>Current Latency:</b> " + String(latency) + "ms\n\n";
     message += "✅ <b>Service is back online!</b>";
   } else if (status == DOWN) {
-    message += "🚨 <b>SYSTEM DOWN</b>\n\n";
-    message += "🔴 <b>Target:</b> " + targetName + "\n";
-    message += "📊 <b>Last Response:</b> " + String(latency) + "ms\n";
+    message += "🚨 <b>SYSTEM DOWN!</b>\n\n";
+    message += "🔴 <b>Target:</b> " + targetName + "\n\n";
     message += "🕐 <b>Detected:</b> " + getCurrentTime() + "\n";
+    message += "⏱️ <b>Downtime:</b> " + formatTime(totalDowntime) + "\n";
     message += "⚠️ <b>Status:</b> Unreachable\n\n";
     message += "🔍 <b>Waiting for recovery...</b>";
   } else {
@@ -194,6 +202,45 @@ String TelegramService::formatAlertMessage(const String& targetName, Status stat
     message += "🕐 <b>Detected:</b> " + getCurrentTime() + "\n\n";
     message += "🔍 <b>Status unclear, waiting...</b>";
   }
+  
+  return message;
+}
+
+String TelegramService::formatRecoveryMessage(const String& targetName, uint16_t latency, unsigned long totalDowntime, 
+                                             unsigned long firstFailureTime, unsigned long alertStartTime) {
+  String message = "";
+  
+  message += "🟢 <b>SYSTEM RECOVERED</b>\n\n";
+  message += "🎉 <b>Target:</b> " + targetName + "\n\n";
+  
+  // Calculate times
+  unsigned long currentTime = millis();
+  unsigned long recoveryTime = currentTime;
+  
+  // Format failure start time (if available)
+  String failureStartTime = "Unknown";
+  if (firstFailureTime > 0) {
+    failureStartTime = formatMillisToTime(firstFailureTime);
+  }
+  
+  // Format alert start time (if available)
+  String alertStartTimeStr = "Unknown";
+  if (alertStartTime > 0) {
+    alertStartTimeStr = formatMillisToTime(alertStartTime);
+  }
+  
+  // Format recovery time
+  String recoveryTimeStr = getCurrentTime();
+  
+  message += "🕐 <b>First Failure:</b> " + failureStartTime + "\n";
+  message += "🚨 <b>Alert Started:</b> " + alertStartTimeStr + "\n";
+  message += "✅ <b>Recovered At:</b> " + recoveryTimeStr + "\n\n";
+  
+  message += "⏱️ <b>Total Downtime:</b> " + formatTime(totalDowntime) + "\n";
+  message += "📊 <b>Current Latency:</b> " + String(latency) + "ms\n";
+  message += "🔄 <b>Status:</b> Online\n\n";
+  
+  message += "✅ <b>Service is fully operational!</b>";
   
   return message;
 }
@@ -223,6 +270,24 @@ String TelegramService::formatTime(unsigned long seconds) const {
 String TelegramService::getCurrentTime() const {
   // Use NTP service for real time instead of uptime
   return NTPService::getCurrentTime();
+}
+
+String TelegramService::formatMillisToTime(unsigned long millisTime) const {
+  // Convert millis to relative time from boot
+  unsigned long seconds = millisTime / 1000;
+  unsigned long hours = (seconds / 3600) % 24;
+  unsigned long minutes = (seconds / 60) % 60;
+  unsigned long secs = seconds % 60;
+  
+  String timeStr = "";
+  if (hours < 10) timeStr += "0";
+  timeStr += String(hours) + ":";
+  if (minutes < 10) timeStr += "0";
+  timeStr += String(minutes) + ":";
+  if (secs < 10) timeStr += "0";
+  timeStr += String(secs);
+  
+  return timeStr + " (uptime)";
 }
 
 bool TelegramService::sendMessage(const String& message) {

@@ -43,6 +43,8 @@ public:
   bool hasAlertBeenSent() const { return alertSent; }
   unsigned long getLastAlertTime() const { return lastAlertTime; }
   uint16_t getLastLatency() const { return lastLatency; }
+  unsigned long getFirstFailureTime() const { return firstFailureTime; }
+  unsigned long getAlertDowntimeStart() const { return alertDowntimeStart; }
   
   // Setters
   void setTargetName(const String& name);

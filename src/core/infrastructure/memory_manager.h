@@ -39,6 +39,7 @@ public:
   
   // Garbage collection
   void forceGarbageCollection();
+  void forceGarbageCollectionSafe();
   void cleanupStrings();
   void cleanupWiFiClients();
   void cleanupHTTPClients();

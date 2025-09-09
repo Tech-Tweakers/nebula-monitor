@@ -92,7 +92,6 @@ void TouchHandler::mapRawToScreen(int16_t rawX, int16_t rawY, int16_t& screenX, 
 void TouchHandler::setupSPI() {
   touchscreenSPI = new SPIClass(HSPI);
   if (!touchscreenSPI) {
-    Serial.println("[TOUCH] ERROR: Failed to create SPI!");
     return;
   }
   
@@ -103,7 +102,6 @@ void TouchHandler::setupSPI() {
 void TouchHandler::setupTouchscreen() {
   touchscreen = new XPT2046_Touchscreen(T_CS, T_IRQ);
   if (!touchscreen) {
-    Serial.println("[TOUCH] ERROR: Failed to create touchscreen!");
     return;
   }
   
