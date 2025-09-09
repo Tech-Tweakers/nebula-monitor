@@ -221,20 +221,8 @@ String TelegramService::formatTime(unsigned long seconds) const {
 }
 
 String TelegramService::getCurrentTime() const {
-  unsigned long now = millis();
-  unsigned long hours = (now / 3600000) % 24;
-  unsigned long minutes = (now / 60000) % 60;
-  unsigned long seconds = (now / 1000) % 60;
-  
-  String timeStr = "";
-  if (hours < 10) timeStr += "0";
-  timeStr += String(hours) + ":";
-  if (minutes < 10) timeStr += "0";
-  timeStr += String(minutes) + ":";
-  if (seconds < 10) timeStr += "0";
-  timeStr += String(seconds);
-  
-  return timeStr;
+  // Use NTP service for real time instead of uptime
+  return NTPService::getCurrentTime();
 }
 
 bool TelegramService::sendMessage(const String& message) {
