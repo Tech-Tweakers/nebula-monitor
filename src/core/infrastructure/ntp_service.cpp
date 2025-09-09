@@ -18,16 +18,22 @@ bool NTPService::initialize() {
     return false;
   }
   
-  // Try multiple NTP servers (using IPs to bypass DNS/firewall issues)
+  // Try local modem SNTP first, then external servers
+  String gatewayIP = WiFi.gatewayIP().toString();
   const char* ntpServers[] = {
+    gatewayIP.c_str(),   // Local modem SNTP (best option)
     "216.239.35.0",      // time.google.com
     "162.159.200.123",   // time.cloudflare.com  
     "129.6.15.28",       // time.nist.gov
     "pool.ntp.org"       // Keep domain as fallback
   };
   
-  for (int serverIndex = 0; serverIndex < 4; serverIndex++) {
-    Serial.printf("[NTP] Trying server %d: %s\n", serverIndex + 1, ntpServers[serverIndex]);
+  for (int serverIndex = 0; serverIndex < 5; serverIndex++) {
+    if (serverIndex == 0) {
+      Serial.printf("[NTP] Trying server %d: %s (Local Modem SNTP)\n", serverIndex + 1, ntpServers[serverIndex]);
+    } else {
+      Serial.printf("[NTP] Trying server %d: %s\n", serverIndex + 1, ntpServers[serverIndex]);
+    }
     
     // Setup NTP client with current server
     setupNTPClientWithServer(ntpServers[serverIndex]);
