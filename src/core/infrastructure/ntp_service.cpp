@@ -20,6 +20,13 @@ bool NTPService::initialize() {
   
   // Try local modem SNTP first, then external servers
   String gatewayIP = WiFi.gatewayIP().toString();
+  
+  // Validate gateway IP before using it
+  if (gatewayIP == "0.0.0.0" || gatewayIP.length() == 0) {
+    Serial.println("[NTP] WARNING: Gateway IP not available, using external servers only");
+    gatewayIP = "192.168.1.1"; // Fallback to common gateway IP
+  }
+  
   const char* ntpServers[] = {
     gatewayIP.c_str(),   // Local modem SNTP (best option)
     "216.239.35.0",      // time.google.com
@@ -245,8 +252,10 @@ void NTPService::setupNTPClientWithServer(const char* server) {
       if (ntpUDP->endPacket()) {
         Serial.println("[NTP] UDP connectivity test: OK");
       } else {
-        Serial.println("[NTP] UDP connectivity test: FAILED");
+        Serial.println("[NTP] UDP connectivity test: FAILED (this is normal for some networks)");
       }
+    } else {
+      Serial.println("[NTP] UDP connectivity test: SKIPPED (packet creation failed)");
     }
   } else {
     Serial.println("[NTP] WARNING: Failed to open UDP port 123");
