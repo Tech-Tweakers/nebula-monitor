@@ -18,12 +18,12 @@ bool NTPService::initialize() {
     return false;
   }
   
-  // Try multiple NTP servers
+  // Try multiple NTP servers (using IPs to bypass DNS/firewall issues)
   const char* ntpServers[] = {
-    "pool.ntp.org",
-    "time.google.com", 
-    "time.cloudflare.com",
-    "time.nist.gov"
+    "216.239.35.0",      // time.google.com
+    "162.159.200.123",   // time.cloudflare.com  
+    "129.6.15.28",       // time.nist.gov
+    "pool.ntp.org"       // Keep domain as fallback
   };
   
   for (int serverIndex = 0; serverIndex < 4; serverIndex++) {
@@ -71,19 +71,44 @@ void NTPService::cleanup() {
 
 bool NTPService::syncTime() {
   if (!initialized || !timeClient) {
+    Serial.println("[NTP] ERROR: Not initialized or no client!");
     return false;
   }
   
   Serial.println("[NTP] Syncing time...");
   
-  if (timeClient->update()) {
-    lastSync = millis();
-    Serial.printf("[NTP] Time synced: %s\n", getFormattedTime().c_str());
-    return true;
-  } else {
-    Serial.println("[NTP] ERROR: Time sync failed!");
-    return false;
+  // Add timeout and retry logic
+  unsigned long startTime = millis();
+  bool success = false;
+  
+  // Try up to 3 times with shorter timeouts
+  for (int attempt = 0; attempt < 3; attempt++) {
+    Serial.printf("[NTP] Sync attempt %d/3...\n", attempt + 1);
+    
+    if (timeClient->update()) {
+      lastSync = millis();
+      unsigned long syncTime = millis() - startTime;
+      Serial.printf("[NTP] Time synced in %lums: %s\n", syncTime, getFormattedTime().c_str());
+      success = true;
+      break;
+    } else {
+      Serial.printf("[NTP] Sync attempt %d failed\n", attempt + 1);
+      if (attempt < 2) {
+        delay(1000); // Wait 1 second before retry
+      }
+    }
   }
+  
+  if (!success) {
+    Serial.println("[NTP] ERROR: All sync attempts failed!");
+    Serial.println("[NTP] Possible causes:");
+    Serial.println("[NTP] - Modem/router blocking UDP port 123");
+    Serial.println("[NTP] - Firewall blocking NTP traffic");
+    Serial.println("[NTP] - ISP blocking NTP servers");
+    Serial.println("[NTP] - Network connectivity issues");
+  }
+  
+  return success;
 }
 
 bool NTPService::syncTimeIfNeeded() {
@@ -205,8 +230,21 @@ void NTPService::setupNTPClientWithServer(const char* server) {
   // Test UDP connection
   if (ntpUDP->begin(123)) { // NTP port
     Serial.println("[NTP] UDP port 123 opened successfully");
+    
+    // Test UDP connectivity by sending a test packet
+    IPAddress testIP(8, 8, 8, 8); // Google DNS for test
+    if (ntpUDP->beginPacket(testIP, 53)) { // DNS port for test
+      uint8_t testData[] = {'t', 'e', 's', 't'};
+      ntpUDP->write(testData, 4);
+      if (ntpUDP->endPacket()) {
+        Serial.println("[NTP] UDP connectivity test: OK");
+      } else {
+        Serial.println("[NTP] UDP connectivity test: FAILED");
+      }
+    }
   } else {
     Serial.println("[NTP] WARNING: Failed to open UDP port 123");
+    Serial.println("[NTP] This usually means the modem/router is blocking UDP");
   }
 }
 
