@@ -116,6 +116,25 @@ void MemoryManager::forceGarbageCollection() {
   lastGCCleanup = now;
 }
 
+void MemoryManager::forceGarbageCollectionSafe() {
+  uint32_t now = millis();
+  
+  // Don't run GC too frequently
+  if (now - lastGCCleanup < GC_INTERVAL_MS) {
+    return;
+  }
+  
+  // Check if we're in a critical operation (like scanning)
+  // This is a safety check to avoid interrupting critical operations
+  if (ESP.getFreeHeap() > CRITICAL_MEMORY_THRESHOLD) {
+    Serial.println("[MEMORY_MANAGER] Memory not critical, skipping GC for safety");
+    return;
+  }
+  
+  Serial.println("[MEMORY_MANAGER] Running safe garbage collection...");
+  forceGarbageCollection();
+}
+
 void MemoryManager::cleanupStrings() {
   // Force cleanup of temporary strings
   // This is a best-effort approach since we can't force String cleanup

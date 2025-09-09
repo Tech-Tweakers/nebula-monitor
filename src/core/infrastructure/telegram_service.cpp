@@ -189,11 +189,10 @@ String TelegramService::formatAlertMessage(const String& targetName, Status stat
     message += "📊 <b>Current Latency:</b> " + String(latency) + "ms\n\n";
     message += "✅ <b>Service is back online!</b>";
   } else if (status == DOWN) {
-    message += "🚨 <b>SYSTEM DOWN</b>\n\n";
+    message += "🚨 <b>SYSTEM DOWN!</b>\n\n";
     message += "🔴 <b>Target:</b> " + targetName + "\n\n";
     message += "🕐 <b>Detected:</b> " + getCurrentTime() + "\n";
-    message += "⏱️ <b>Downtime:</b> " + formatTime(totalDowntime) + "\n\n";
-    message += "📊 <b>Last Response:</b> " + String(latency) + "ms\n";
+    message += "⏱️ <b>Downtime:</b> " + formatTime(totalDowntime) + "\n";
     message += "⚠️ <b>Status:</b> Unreachable\n\n";
     message += "🔍 <b>Waiting for recovery...</b>";
   } else {
@@ -235,14 +234,14 @@ String TelegramService::formatRecoveryMessage(const String& targetName, uint16_t
   
   // Analytics section
   message += "📊 <b>ANALYTICS</b>\n";
-  message += "━━━━━━━━━━━━━━━━━━━━\n";
+  message += "━━━━━━━━━━━━━━━━\n";
   message += "🕐 <b>First Failure:</b> " + failureStartTime + "\n";
   message += "🚨 <b>Alert Started:</b> " + alertStartTimeStr + "\n";
   message += "✅ <b>Recovered At:</b> " + recoveryTimeStr + "\n\n";
   
   // Summary section
   message += "📈 <b>SUMMARY</b>\n";
-  message += "━━━━━━━━━━━━━━━━━━━━\n";
+  message += "━━━━━━━━━━━━━━━━\n";
   message += "⏱️ <b>Total Downtime:</b> " + formatTime(totalDowntime) + "\n";
   message += "📊 <b>Current Latency:</b> " + String(latency) + "ms\n";
   message += "🔄 <b>Status:</b> Online\n\n";

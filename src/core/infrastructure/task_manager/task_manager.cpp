@@ -1,5 +1,5 @@
-#include "tasks/task_manager.h"
-#include "core/application/network_monitor.h"
+#include "core/infrastructure/task_manager/task_manager.h"
+#include "core/domain/network_monitor/network_monitor.h"
 #include "ui/display_manager.h"
 #include "core/infrastructure/memory_manager.h"
 #include <Arduino.h>
@@ -196,9 +196,17 @@ void TaskManager::scannerTask(void* pv) {
     
     // Check memory every 10 seconds
     if (now - lastMemoryCheck > 10000) {
+      // Only run GC if NOT scanning to avoid interrupting active scans
       if (MemoryManager::getInstance().isMemoryLow()) {
-        Serial.println("[SCANNER_TASK] Low memory detected, triggering GC");
-        MemoryManager::getInstance().forceGarbageCollection();
+        if (networkMonitor && !networkMonitor->isScanning()) {
+          Serial.println("[SCANNER_TASK] Low memory detected, triggering GC (scan not active)");
+          MemoryManager::getInstance().forceGarbageCollection();
+        } else if (networkMonitor && networkMonitor->isScanning()) {
+          Serial.println("[SCANNER_TASK] Low memory detected but scan active, deferring GC");
+        } else {
+          Serial.println("[SCANNER_TASK] Low memory detected, triggering GC");
+          MemoryManager::getInstance().forceGarbageCollection();
+        }
       }
       lastMemoryCheck = now;
     }
@@ -208,6 +216,12 @@ void TaskManager::scannerTask(void* pv) {
     
     // Update network monitor
     if (networkMonitor) {
+      // Check for stuck scans
+      if (networkMonitor->isScanStuck()) {
+        Serial.println("[SCANNER_TASK] WARNING: Detected stuck scan, forcing stop");
+        networkMonitor->forceStopScan();
+      }
+      
       networkMonitor->update();
     }
     

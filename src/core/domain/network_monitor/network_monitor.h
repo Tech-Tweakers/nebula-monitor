@@ -5,7 +5,7 @@
 #include "core/infrastructure/http_client.h"
 #include "core/infrastructure/telegram_service.h"
 #include "ui/display_manager.h"
-#include "tasks/task_manager.h"
+#include "core/infrastructure/task_manager/task_manager.h"
 #include <Arduino.h>
 
 class NetworkMonitor {
@@ -64,7 +64,6 @@ public:
   void resetPerformanceMetrics();
   
   // Scan monitoring
-  bool isScanning() const { return scanning; }
   bool isScanStuck() const;
   void forceStopScan();
   unsigned long getLastScanDuration() const { return lastScanDuration; }

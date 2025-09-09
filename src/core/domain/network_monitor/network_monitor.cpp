@@ -1,5 +1,6 @@
-#include "core/application/network_monitor.h"
+#include "core/domain/network_monitor/network_monitor.h"
 #include "config/config_loader.h"
+#include "core/infrastructure/memory_manager.h"
 #include <Arduino.h>
 
 NetworkMonitor::NetworkMonitor() 
@@ -74,10 +75,14 @@ void NetworkMonitor::update() {
 }
 
 void NetworkMonitor::startScanning() {
-  if (scanning) return;
+  if (scanning) {
+    Serial.println("[NETWORK_MONITOR] WARNING: Scan already in progress, skipping");
+    return;
+  }
   
   scanning = true;
   lastScanTime = millis();
+  scanStartTime = millis();
   
   Serial.println("[NETWORK_MONITOR] Starting scan cycle...");
   
@@ -86,16 +91,38 @@ void NetworkMonitor::startScanning() {
     displayManager->onScanStarted();
   }
   
-  // Scan all targets
+  // Scan all targets with timeout protection
   for (int i = 0; i < targetCount; i++) {
+    unsigned long targetStartTime = millis();
+    
+    // Check if scan is taking too long (30 seconds max per scan)
+    if (millis() - scanStartTime > 30000) {
+      Serial.println("[NETWORK_MONITOR] WARNING: Scan timeout, stopping remaining targets");
+      break;
+    }
+    
+    // Check memory before each target
+    if (MemoryManager::getInstance().isMemoryCritical()) {
+      Serial.println("[NETWORK_MONITOR] WARNING: Critical memory, stopping scan");
+      break;
+    }
+    
     scanTarget(i);
+    
+    // Check if this target took too long (10 seconds max per target)
+    unsigned long targetDuration = millis() - targetStartTime;
+    if (targetDuration > 10000) {
+      Serial.printf("[NETWORK_MONITOR] WARNING: Target %d took %lums (too long)\n", i, targetDuration);
+    }
+    
     delay(200); // Small delay between targets
   }
   
   // Mark scan as complete
   scanning = false;
   
-  Serial.println("[NETWORK_MONITOR] Scan cycle complete");
+  lastScanDuration = millis() - scanStartTime;
+  Serial.printf("[NETWORK_MONITOR] Scan cycle complete in %lums\n", lastScanDuration);
   
   // Notify display that scan completed
   if (displayManager) {
@@ -147,9 +174,13 @@ bool NetworkMonitor::loadTargets() {
 }
 
 void NetworkMonitor::scanTarget(int index) {
-  if (index < 0 || index >= targetCount || !httpClient) return;
+  if (index < 0 || index >= targetCount || !httpClient) {
+    Serial.printf("[NETWORK_MONITOR] ERROR: Invalid scan target %d\n", index);
+    return;
+  }
   
   Target& target = targets[index];
+  unsigned long targetStartTime = millis();
   
   // Optimized string handling
   const char* name = target.getName().c_str();
@@ -159,15 +190,29 @@ void NetworkMonitor::scanTarget(int index) {
   
   uint16_t latency = 0;
   
+  // Check memory before proceeding
+  if (MemoryManager::getInstance().isMemoryCritical()) {
+    Serial.println("[NETWORK_MONITOR] ERROR: Critical memory, skipping target");
+    updateTargetStatus(index, DOWN, 0);
+    return;
+  }
+  
   // Reduced delay for better performance
   vTaskDelay(pdMS_TO_TICKS(50));
   
+  // Perform the check with timeout protection
   if (target.getMonitorType() == HEALTH_CHECK) {
     // Use enhanced health check with intelligent timeout and retry
     latency = performSafeHealthCheck(target.getUrl(), target.getHealthEndpoint());
   } else {
     // Enhanced ping with intelligent timeout
     latency = httpClient->ping(target.getUrl(), 0); // 0 = auto-calculate timeout
+  }
+  
+  // Check if this target took too long
+  unsigned long targetDuration = millis() - targetStartTime;
+  if (targetDuration > 15000) {
+    Serial.printf("[NETWORK_MONITOR] WARNING: Target %s took %lums (very long)\n", name, targetDuration);
   }
   
   Status newStatus = (latency > 0) ? UP : DOWN;
@@ -299,4 +344,24 @@ void NetworkMonitor::resetPerformanceMetrics() {
     httpClient->resetMetrics();
   }
   Serial.println("[NETWORK_MONITOR] Performance metrics reset");
+}
+
+bool NetworkMonitor::isScanStuck() const {
+  if (!scanning) return false;
+  
+  // If scan has been running for more than 60 seconds, consider it stuck
+  unsigned long scanDuration = millis() - scanStartTime;
+  return scanDuration > 60000;
+}
+
+void NetworkMonitor::forceStopScan() {
+  if (!scanning) return;
+  
+  Serial.println("[NETWORK_MONITOR] EMERGENCY: Force stopping stuck scan!");
+  scanning = false;
+  
+  // Notify display that scan was force-stopped
+  if (displayManager) {
+    displayManager->onScanCompleted();
+  }
 }

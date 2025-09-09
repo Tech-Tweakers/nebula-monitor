@@ -4,7 +4,7 @@
 
 // Core includes
 #include "core/domain/status.h"
-#include "core/application/network_monitor.h"
+#include "core/domain/network_monitor/network_monitor.h"
 #include "core/infrastructure/wifi_service.h"
 #include "core/infrastructure/http_client.h"
 #include "core/infrastructure/telegram_service.h"
@@ -14,7 +14,7 @@
 #include "ui/display_manager.h"
 #include "ui/touch_handler.h"
 #include "ui/led_controller.h"
-#include "tasks/task_manager.h"
+#include "core/infrastructure/task_manager/task_manager.h"
 #include "config/config_loader.h"
 
 // Global instances
