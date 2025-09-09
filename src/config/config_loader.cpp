@@ -17,6 +17,10 @@ bool ConfigLoader::load() {
     return false;
   }
   
+  // Initialize SDCard Manager and sync config
+  Serial.println("[CONFIG] Checking for SDCard configuration sync...");
+  SDCardManager::getInstance().initialize();
+  
   // Check if config file exists
   if (!SPIFFS.exists("/config.env")) {
     Serial.println("[CONFIG] ERROR: config.env file not found!");
