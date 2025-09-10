@@ -420,6 +420,19 @@ bool TelegramService::sendMessage(const String& message, int targetIndex, bool i
     if (httpResponseCode == 200) {
       Serial.println("[TELEGRAM] Message sent successfully");
       
+      // Parse response to get real message_id from Telegram
+      String response = http.getString();
+      DynamicJsonDocument responseDoc(512);
+      DeserializationError error = deserializeJson(responseDoc, response);
+      
+      uint32_t realMessageId = 0;
+      if (!error && responseDoc["ok"] == true) {
+        realMessageId = responseDoc["result"]["message_id"];
+        Serial.printf("[TELEGRAM] Got real message_id: %d\n", realMessageId);
+      } else {
+        Serial.println("[TELEGRAM] WARNING: Could not parse message_id from response");
+      }
+      
       // Update thread management for this target
       if (targetIndex >= 0 && targetIndex < 6) {
         if (isRecovery) {
@@ -429,11 +442,13 @@ bool TelegramService::sendMessage(const String& message, int targetIndex, bool i
           Serial.printf("[TELEGRAM] Thread ended for target %d (recovery)\n", targetIndex);
         } else {
           // Down alert continues or starts thread
-          // Note: We can't get the actual message_id from response easily,
-          // so we'll use a simple counter for now
-          lastMessageIds[targetIndex] = millis(); // Simple unique ID
-          isThreadActive[targetIndex] = true;
-          Serial.printf("[TELEGRAM] Thread active for target %d (down)\n", targetIndex);
+          if (realMessageId > 0) {
+            lastMessageIds[targetIndex] = realMessageId;
+            isThreadActive[targetIndex] = true;
+            Serial.printf("[TELEGRAM] Thread active for target %d (down) - message_id: %d\n", targetIndex, realMessageId);
+          } else {
+            Serial.printf("[TELEGRAM] WARNING: Could not get message_id for target %d\n", targetIndex);
+          }
         }
       }
       
