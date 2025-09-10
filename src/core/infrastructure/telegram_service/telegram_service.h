@@ -1,7 +1,7 @@
 #pragma once
-#include "core/domain/alert.h"
-#include "ssl_mutex_manager.h"
-#include "ntp_service.h"
+#include "core/domain/alert/alert.h"
+#include "core/infrastructure/ssl_mutex_manager/ssl_mutex_manager.h"
+#include "core/infrastructure/ntp_service/ntp_service.h"
 #include <Arduino.h>
 
 class TelegramService {
@@ -45,6 +45,7 @@ private:
                                unsigned long firstFailureTime, unsigned long alertStartTime);
   String formatTime(unsigned long seconds) const;
   String formatMillisToTime(unsigned long millisTime) const;
+  String convertMillisToRealTime(unsigned long millisTime) const;
   String getCurrentTime() const;
   
   // HTTP communication

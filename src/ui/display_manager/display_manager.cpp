@@ -1,6 +1,6 @@
-#include "ui/display_manager.h"
-#include "ui/touch_handler.h"
-#include "ui/led_controller.h"
+#include "ui/display_manager/display_manager.h"
+#include "ui/touch_handler/touch_handler.h"
+#include "ui/led_controller/led_controller.h"
 #include <Arduino.h>
 #include <WiFi.h>
 
@@ -217,7 +217,7 @@ void DisplayManager::createFooter() {
   
   // Footer label
   footer_label = lv_label_create(footer);
-  lv_label_set_text(footer_label, "Preparing to work...");
+  lv_label_set_text(footer_label, "Warming up...");
   lv_obj_set_style_text_color(footer_label, lv_color_hex(0xCCCCCC), LV_PART_MAIN);
   lv_obj_set_width(footer_label, LV_PCT(100));
   lv_obj_set_style_text_align(footer_label, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);

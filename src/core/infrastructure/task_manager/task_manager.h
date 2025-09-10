@@ -2,7 +2,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
-#include "core/domain/status.h"
+#include "core/domain/status/status.h"
 #include <Arduino.h>
 
 // Forward declarations

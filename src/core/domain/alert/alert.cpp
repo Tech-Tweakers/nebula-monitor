@@ -1,4 +1,4 @@
-#include "alert.h"
+#include "core/domain/alert/alert.h"
 
 Alert::Alert(int index, const String& name) 
   : targetIndex(index), targetName(name ? name : "Unknown"), 
@@ -106,6 +106,22 @@ void Alert::setTargetName(const String& name) {
   if (name && name.length() > 0) {
     targetName = String(name);
   }
+}
+
+void Alert::reset() {
+  // Reset all alert data for clean state
+  failureCount = 0;
+  firstFailureTime = 0;
+  lastAlertTime = 0;
+  isActive = false;
+  alertSent = false;
+  lastLatency = 0;
+  alertDowntimeStart = 0;
+  totalDowntime = 0;
+  currentStatus = UNKNOWN;
+  lastStatus = UNKNOWN;
+  
+  Serial.printf("[ALERT] %s: Reset complete - clean state for new alerts\n", targetName.c_str());
 }
 
 void Alert::printState() const {

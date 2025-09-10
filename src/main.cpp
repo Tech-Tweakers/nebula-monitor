@@ -3,19 +3,19 @@
 #include <TFT_eSPI.h>
 
 // Core includes
-#include "core/domain/status.h"
+#include "core/domain/status/status.h"
 #include "core/domain/network_monitor/network_monitor.h"
-#include "core/infrastructure/wifi_service.h"
-#include "core/infrastructure/http_client.h"
-#include "core/infrastructure/telegram_service.h"
-#include "core/infrastructure/ssl_mutex_manager.h"
-#include "core/infrastructure/memory_manager.h"
-#include "core/infrastructure/ntp_service.h"
-#include "ui/display_manager.h"
-#include "ui/touch_handler.h"
-#include "ui/led_controller.h"
+#include "core/infrastructure/wifi_service/wifi_service.h"
+#include "core/infrastructure/http_client/http_client.h"
+#include "core/infrastructure/telegram_service/telegram_service.h"
+#include "core/infrastructure/ssl_mutex_manager/ssl_mutex_manager.h"
+#include "core/infrastructure/memory_manager/memory_manager.h"
+#include "core/infrastructure/ntp_service/ntp_service.h"
+#include "ui/display_manager/display_manager.h"
+#include "ui/touch_handler/touch_handler.h"
+#include "ui/led_controller/led_controller.h"
 #include "core/infrastructure/task_manager/task_manager.h"
-#include "config/config_loader.h"
+#include "config/config_loader/config_loader.h"
 
 // Global instances
 WiFiService* wifiService;
