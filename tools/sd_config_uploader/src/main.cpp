@@ -65,9 +65,9 @@ ALL_LOGS_ENABLED=false
 # Formato: NAME|URL|HEALTH_ENDPOINT|MONITOR_TYPE
 # Monitor types: PING, HEALTH_CHECK
 # Exemplo: Proxmox HV|http://192.168.1.128:8006/||PING
-TARGET_1=Proxmox NEW|http://192.168.1.128:8006/||PING
-TARGET_2=Router #1|http://192.168.1.1||PING
-TARGET_3=Router #2|https://192.168.1.172||PING
+TARGET_1=Mock API 1|http://192.168.1.171:5001|/health|HEALTH_CHECK
+TARGET_2=Mock API 2|http://192.168.1.171:5002|/health|HEALTH_CHECK
+TARGET_3=Mock API 3|http://192.168.1.171:5003|/health|HEALTH_CHECK
 TARGET_4=Polaris API|https://marker-unfortunately-practices-rapid.trycloudflare.com|/health|HEALTH_CHECK
 TARGET_5=Polaris INT|http://ce94eb486673.ngrok-free.app|/health|PING
 TARGET_6=Polaris WEB|https://tech-tweakers.github.io/polaris-v2-web||PING
