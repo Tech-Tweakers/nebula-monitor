@@ -1,5 +1,5 @@
 #pragma once
-#include "core/domain/status.h"
+#include "core/domain/status/status.h"
 #include <Arduino.h>
 
 class Alert {
@@ -32,6 +32,7 @@ public:
   bool shouldSendRecovery() const;
   void markAlertSent();
   void markRecovered();
+  void reset(); // Reset all alert data for clean state
   
   // Getters
   bool isAlertActive() const { return isActive; }

@@ -1,5 +1,5 @@
-#include "ui/led_controller.h"
-#include "config/config_loader.h"
+#include "ui/led_controller/led_controller.h"
+#include "config/config_loader/config_loader.h"
 #include <WiFi.h>
 
 // Static member definitions

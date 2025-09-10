@@ -1,8 +1,9 @@
-#include "telegram_service.h"
-#include "http_client.h"
-#include "../domain/alert.h"
-#include "ssl_mutex_manager.h"
-#include "memory_manager.h"
+#include "core/infrastructure/telegram_service/telegram_service.h"
+#include "core/infrastructure/http_client/http_client.h"
+#include "core/domain/alert/alert.h"
+#include "core/infrastructure/ssl_mutex_manager/ssl_mutex_manager.h"
+#include "core/infrastructure/memory_manager/memory_manager.h"
+#include "core/infrastructure/ntp_service/ntp_service.h"
 #include <ArduinoJson.h>
 
 TelegramService::TelegramService() : enabled(false), sendingMessage(false) {
@@ -103,8 +104,10 @@ void TelegramService::sendRecoveryAlert(int targetIndex, const String& targetNam
   if (sendMessage(message)) {
     if (alert) {
       alert->markRecovered();
+      // Reset alert data for clean state - ready for next alert
+      alert->reset();
     }
-    Serial.printf("[TELEGRAM] Recovery alert sent for target %d (%s)\n", targetIndex, targetName.c_str());
+    Serial.printf("[TELEGRAM] Recovery alert sent for target %d (%s) - Alert reset for clean state\n", targetIndex, targetName.c_str());
   } else {
     Serial.printf("[TELEGRAM] Failed to send recovery alert for target %d (%s)\n", targetIndex, targetName.c_str());
   }
@@ -191,7 +194,7 @@ String TelegramService::formatAlertMessage(const String& targetName, Status stat
   } else if (status == DOWN) {
     message += "🚨 <b>SYSTEM DOWN!</b>\n\n";
     message += "🔴 <b>Target:</b> " + targetName + "\n\n";
-    message += "🕐 <b>Detected:</b> " + getCurrentTime() + "\n";
+    message += "🕐 <b>Detected:</b> " + NTPService::getCurrentDateTime() + "\n";
     message += "⏱️ <b>Downtime:</b> " + formatTime(totalDowntime) + "\n";
     message += "⚠️ <b>Status:</b> Unreachable\n\n";
     message += "🔍 <b>Waiting for recovery...</b>";
@@ -199,7 +202,7 @@ String TelegramService::formatAlertMessage(const String& targetName, Status stat
     message += "❓ <b>UNKNOWN STATUS</b>\n\n";
     message += "🟡 <b>Target:</b> " + targetName + "\n";
     message += "📊 <b>Response:</b> " + String(latency) + "ms\n";
-    message += "🕐 <b>Detected:</b> " + getCurrentTime() + "\n\n";
+    message += "🕐 <b>Detected:</b> " + NTPService::getCurrentDateTime() + "\n\n";
     message += "🔍 <b>Status unclear, waiting...</b>";
   }
   
@@ -220,20 +223,21 @@ String TelegramService::formatRecoveryMessage(const String& targetName, uint16_t
   // Format failure start time (if available)
   String failureStartTime = "Unknown";
   if (firstFailureTime > 0) {
-    failureStartTime = formatMillisToTime(firstFailureTime);
+    // Convert millis to real time using NTP
+    failureStartTime = convertMillisToRealTime(firstFailureTime);
   }
   
   // Format alert start time (if available)
   String alertStartTimeStr = "Unknown";
   if (alertStartTime > 0) {
-    alertStartTimeStr = formatMillisToTime(alertStartTime);
+    // Convert millis to real time using NTP
+    alertStartTimeStr = convertMillisToRealTime(alertStartTime);
   }
   
   // Format recovery time
-  String recoveryTimeStr = getCurrentTime();
+  String recoveryTimeStr = NTPService::getCurrentDateTime();
   
   message += "🕐 <b>First Failure:</b> " + failureStartTime + "\n";
-  message += "🚨 <b>Alert Started:</b> " + alertStartTimeStr + "\n";
   message += "✅ <b>Recovered At:</b> " + recoveryTimeStr + "\n\n";
   
   message += "⏱️ <b>Total Downtime:</b> " + formatTime(totalDowntime) + "\n";
@@ -269,7 +273,9 @@ String TelegramService::formatTime(unsigned long seconds) const {
 
 String TelegramService::getCurrentTime() const {
   // Use NTP service for real time instead of uptime
-  return NTPService::getCurrentTime();
+  String timeStr = NTPService::getCurrentDateTime();
+  Serial.printf("[TELEGRAM] getCurrentTime: %s\n", timeStr.c_str());
+  return timeStr;
 }
 
 String TelegramService::formatMillisToTime(unsigned long millisTime) const {
@@ -288,6 +294,58 @@ String TelegramService::formatMillisToTime(unsigned long millisTime) const {
   timeStr += String(secs);
   
   return timeStr + " (uptime)";
+}
+
+String TelegramService::convertMillisToRealTime(unsigned long millisTime) const {
+  // Try to get current NTP time
+  String currentTimeStr = NTPService::getCurrentDateTime();
+  
+  // If NTP is working, calculate the real time
+  if (!currentTimeStr.endsWith("(uptime)")) {
+    // NTP is working, calculate the real time for the millis timestamp
+    unsigned long currentMillis = millis();
+    unsigned long timeDiff = currentMillis - millisTime;
+    
+    // Convert current NTP time to seconds since midnight
+    // Assuming format is HH:MM:SS
+    int colon1 = currentTimeStr.indexOf(':');
+    int colon2 = currentTimeStr.indexOf(':', colon1 + 1);
+    
+    if (colon1 > 0 && colon2 > 0) {
+      int hours = currentTimeStr.substring(0, colon1).toInt();
+      int minutes = currentTimeStr.substring(colon1 + 1, colon2).toInt();
+      int seconds = currentTimeStr.substring(colon2 + 1).toInt();
+      
+      // Convert to total seconds since midnight
+      unsigned long currentSeconds = hours * 3600 + minutes * 60 + seconds;
+      
+      // Subtract the time difference
+      unsigned long targetSeconds = currentSeconds - (timeDiff / 1000);
+      
+      // Handle day rollover
+      if (targetSeconds < 0) {
+        targetSeconds += 86400; // Add 24 hours
+      }
+      
+      // Convert back to HH:MM:SS
+      int targetHours = (targetSeconds / 3600) % 24;
+      int targetMinutes = (targetSeconds / 60) % 60;
+      int targetSecs = targetSeconds % 60;
+      
+      String timeStr = "";
+      if (targetHours < 10) timeStr += "0";
+      timeStr += String(targetHours) + ":";
+      if (targetMinutes < 10) timeStr += "0";
+      timeStr += String(targetMinutes) + ":";
+      if (targetSecs < 10) timeStr += "0";
+      timeStr += String(targetSecs);
+      
+      return timeStr;
+    }
+  }
+  
+  // Fallback to uptime format
+  return formatMillisToTime(millisTime);
 }
 
 bool TelegramService::sendMessage(const String& message) {

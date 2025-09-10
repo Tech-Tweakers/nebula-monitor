@@ -1,4 +1,4 @@
-#include "ntp_service.h"
+#include "core/infrastructure/ntp_service/ntp_service.h"
 #include <WiFi.h>
 
 // Static member definitions
@@ -154,6 +154,12 @@ bool NTPService::syncTimeIfNeeded() {
 }
 
 String NTPService::getCurrentTime() {
+  // Try to initialize if not done yet (for late WiFi connection)
+  if (!initialized && WiFi.status() == WL_CONNECTED) {
+    Serial.println("[NTP] Late initialization attempt...");
+    initialize();
+  }
+  
   if (!initialized || !timeClient) {
     // Fallback to uptime if NTP not available
     unsigned long now = millis();
@@ -202,6 +208,35 @@ String NTPService::getCurrentTime() {
   
   unsigned long epochTime = timeClient->getEpochTime();
   return formatTime(epochTime);
+}
+
+String NTPService::getCurrentDateTime() {
+  // Late initialization attempt if not initialized but WiFi is connected
+  if (!initialized && WiFi.status() == WL_CONNECTED) {
+    Serial.println("[NTP] Late initialization attempt...");
+    initialize();
+  }
+  
+  if (!timeClient) {
+    // Fallback to uptime format
+    unsigned long uptime = millis() / 1000;
+    unsigned long hours = uptime / 3600;
+    unsigned long minutes = (uptime % 3600) / 60;
+    unsigned long seconds = uptime % 60;
+    
+    String timeStr = "";
+    if (hours < 10) timeStr += "0";
+    timeStr += String(hours) + ":";
+    if (minutes < 10) timeStr += "0";
+    timeStr += String(minutes) + ":";
+    if (seconds < 10) timeStr += "0";
+    timeStr += String(seconds);
+    
+    return "Uptime: " + timeStr;
+  }
+  
+  unsigned long epochTime = timeClient->getEpochTime();
+  return formatDateTime(epochTime);
 }
 
 String NTPService::getFormattedTime() {
@@ -284,4 +319,48 @@ String NTPService::formatTime(unsigned long epochTime) {
   timeStr += String(seconds);
   
   return timeStr;
+}
+
+String NTPService::formatDateTime(unsigned long epochTime) {
+  // Convert epoch time to local time components
+  unsigned long localTime = epochTime;
+  
+  // Calculate date components
+  unsigned long days = localTime / 86400;
+  unsigned long year = 1970 + (days / 365);
+  unsigned long remainingDays = days % 365;
+  
+  // Simple month calculation (approximate)
+  int month = 1;
+  int day = 1;
+  int daysInMonth[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+  
+  for (int i = 0; i < 12; i++) {
+    if (remainingDays <= daysInMonth[i]) {
+      month = i + 1;
+      day = remainingDays + 1;
+      break;
+    }
+    remainingDays -= daysInMonth[i];
+  }
+  
+  // Calculate time components
+  unsigned long hours = (localTime % 86400) / 3600;
+  unsigned long minutes = (localTime % 3600) / 60;
+  unsigned long seconds = localTime % 60;
+  
+  // Format: DD/MM/YYYY HH:MM:SS
+  String dateTimeStr = "";
+  if (day < 10) dateTimeStr += "0";
+  dateTimeStr += String(day) + "/";
+  if (month < 10) dateTimeStr += "0";
+  dateTimeStr += String(month) + "/" + String(year) + " ";
+  if (hours < 10) dateTimeStr += "0";
+  dateTimeStr += String(hours) + ":";
+  if (minutes < 10) dateTimeStr += "0";
+  dateTimeStr += String(minutes) + ":";
+  if (seconds < 10) dateTimeStr += "0";
+  dateTimeStr += String(seconds);
+  
+  return dateTimeStr;
 }

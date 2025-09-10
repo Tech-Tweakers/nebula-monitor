@@ -15,7 +15,7 @@ bool MemoryManager::initialize() {
   
   // Initialize state
   initialized = true;
-  watchdogFeedingEnabled = true;
+  watchdogFeedingEnabled = false; // Disabled - full control to us
   lastGCCleanup = 0;
   lastMemoryCheck = 0;
   lastWatchdogFeed = 0;
@@ -41,6 +41,7 @@ bool MemoryManager::initialize() {
   }
   
   Serial.println("[MEMORY_MANAGER] Memory manager initialized successfully!");
+  Serial.println("[MEMORY_MANAGER] WATCHDOG DISABLED - Full control to application");
   return true;
 }
 

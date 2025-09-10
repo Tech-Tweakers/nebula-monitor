@@ -2,7 +2,7 @@
 #include <Arduino.h>
 #include <WiFiUdp.h>
 #include <NTPClient.h>
-#include "config/config_loader.h"
+#include "config/config_loader/config_loader.h"
 
 class NTPService {
 private:
@@ -22,6 +22,7 @@ public:
   static bool syncTime();
   static bool syncTimeIfNeeded(); // Smart sync with minimum interval
   static String getCurrentTime();
+  static String getCurrentDateTime(); // New: returns date + time
   static String getFormattedTime();
   static bool isTimeSynced();
   
@@ -33,4 +34,5 @@ private:
   static void setupNTPClient();
   static void setupNTPClientWithServer(const char* server);
   static String formatTime(unsigned long epochTime);
+  static String formatDateTime(unsigned long epochTime);
 };

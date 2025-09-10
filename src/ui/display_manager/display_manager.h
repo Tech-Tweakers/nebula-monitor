@@ -1,7 +1,7 @@
 #pragma once
 #include <lvgl.h>
-#include "core/domain/status.h"
-#include "core/domain/target.h"
+#include "core/domain/status/status.h"
+#include "core/domain/target/target.h"
 #include <Arduino.h>
 
 class DisplayManager {

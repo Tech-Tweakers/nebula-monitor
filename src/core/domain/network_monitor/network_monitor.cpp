@@ -1,6 +1,6 @@
 #include "core/domain/network_monitor/network_monitor.h"
-#include "config/config_loader.h"
-#include "core/infrastructure/memory_manager.h"
+#include "config/config_loader/config_loader.h"
+#include "core/infrastructure/memory_manager/memory_manager.h"
 #include <Arduino.h>
 
 NetworkMonitor::NetworkMonitor() 
@@ -95,6 +95,9 @@ void NetworkMonitor::startScanning() {
   for (int i = 0; i < targetCount; i++) {
     unsigned long targetStartTime = millis();
     
+    // Feed watchdog at start of each target
+    MemoryManager::getInstance().feedWatchdog();
+    
     // Check if scan is taking too long (30 seconds max per scan)
     if (millis() - scanStartTime > 30000) {
       Serial.println("[NETWORK_MONITOR] WARNING: Scan timeout, stopping remaining targets");
@@ -108,6 +111,9 @@ void NetworkMonitor::startScanning() {
     }
     
     scanTarget(i);
+    
+    // Feed watchdog after each target
+    MemoryManager::getInstance().feedWatchdog();
     
     // Check if this target took too long (10 seconds max per target)
     unsigned long targetDuration = millis() - targetStartTime;
@@ -200,22 +206,41 @@ void NetworkMonitor::scanTarget(int index) {
   // Reduced delay for better performance
   vTaskDelay(pdMS_TO_TICKS(50));
   
+  // Feed watchdog before HTTP request
+  MemoryManager::getInstance().feedWatchdog();
+  
+  // Timeout de 10s para conexões lentas, mas evita travamentos
+  uint16_t timeout = 10000;
+  
   // Perform the check with timeout protection
   if (target.getMonitorType() == HEALTH_CHECK) {
-    // Use enhanced health check with intelligent timeout and retry
-    latency = performSafeHealthCheck(target.getUrl(), target.getHealthEndpoint());
+    // Use enhanced health check with timeout
+    latency = performSafeHealthCheck(target.getUrl(), target.getHealthEndpoint(), timeout);
   } else {
-    // Enhanced ping with intelligent timeout
-    latency = httpClient->ping(target.getUrl(), 0); // 0 = auto-calculate timeout
+    // Enhanced ping with timeout
+    latency = httpClient->ping(target.getUrl(), timeout);
   }
+  
+  // Feed watchdog after HTTP request
+  MemoryManager::getInstance().feedWatchdog();
   
   // Check if this target took too long
   unsigned long targetDuration = millis() - targetStartTime;
-  if (targetDuration > 15000) {
-    Serial.printf("[NETWORK_MONITOR] WARNING: Target %s took %lums (very long)\n", name, targetDuration);
+  if (targetDuration > 11000) { // 11s = timeout + margem
+    Serial.printf("[NETWORK_MONITOR] WARNING: Target %s took %lums (timeout)\n", name, targetDuration);
   }
   
-  Status newStatus = (latency > 0) ? UP : DOWN;
+  // Estratégia inteligente: se travou ou demorou demais, marca como UNKNOWN
+  Status newStatus;
+  if (latency > 0) {
+    newStatus = UP;
+  } else if (targetDuration > 11000) {
+    newStatus = UNKNOWN; // Timeout = UNKNOWN (primeira vez no código!)
+    Serial.printf("[NETWORK_MONITOR] Target %s marked as UNKNOWN due to timeout\n", name);
+  } else {
+    newStatus = DOWN;
+  }
+  
   updateTargetStatus(index, newStatus, latency);
 }
 
@@ -245,7 +270,7 @@ void NetworkMonitor::processScanResults() {
   // For now, it's handled in updateTargetStatus
 }
 
-uint16_t NetworkMonitor::performSafeHealthCheck(const String& url, const String& endpoint) {
+uint16_t NetworkMonitor::performSafeHealthCheck(const String& url, const String& endpoint, uint16_t timeout) {
   if (!httpClient) return 0;
   
   // Enhanced URL safety checks

@@ -1,5 +1,5 @@
 #pragma once
-#include "core/domain/status.h"
+#include "core/domain/status/status.h"
 #include <Arduino.h>
 
 class LEDController {

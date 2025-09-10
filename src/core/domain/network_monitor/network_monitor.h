@@ -1,10 +1,10 @@
 #pragma once
-#include "core/domain/target.h"
-#include "core/domain/alert.h"
-#include "core/infrastructure/wifi_service.h"
-#include "core/infrastructure/http_client.h"
-#include "core/infrastructure/telegram_service.h"
-#include "ui/display_manager.h"
+#include "core/domain/target/target.h"
+#include "core/domain/alert/alert.h"
+#include "core/infrastructure/wifi_service/wifi_service.h"
+#include "core/infrastructure/http_client/http_client.h"
+#include "core/infrastructure/telegram_service/telegram_service.h"
+#include "ui/display_manager/display_manager.h"
 #include "core/infrastructure/task_manager/task_manager.h"
 #include <Arduino.h>
 
@@ -47,7 +47,7 @@ public:
   bool loadTargets();
   void scanTarget(int index);
   void updateTargetStatus(int index, Status status, uint16_t latency);
-  uint16_t performSafeHealthCheck(const String& url, const String& endpoint);
+  uint16_t performSafeHealthCheck(const String& url, const String& endpoint, uint16_t timeout = 10000);
   
   // Getters
   int getTargetCount() const { return targetCount; }

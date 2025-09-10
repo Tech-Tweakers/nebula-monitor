@@ -1,6 +1,6 @@
-#include "http_client.h"
-#include "config/config_loader.h"
-#include "memory_manager.h"
+#include "core/infrastructure/http_client/http_client.h"
+#include "config/config_loader/config_loader.h"
+#include "core/infrastructure/memory_manager/memory_manager.h"
 
 HttpClient::HttpClient() {
   lastResponse = "";
@@ -353,11 +353,11 @@ bool HttpClient::isConnectionHealthy() const {
 
 uint16_t HttpClient::calculateTimeout(const String& url, uint16_t requestedTimeout) const {
   if (requestedTimeout > 0) {
-    return min(requestedTimeout, (uint16_t)15000); // Cap at 15s
+    return min(requestedTimeout, (uint16_t)8000); // Cap at 8s (reduced from 15s)
   }
   
   ConnectionConfig config = getConnectionConfig(url);
-  return config.baseTimeout;
+  return min(config.baseTimeout, (uint16_t)8000); // Cap all timeouts at 8s
 }
 
 ConnectionConfig HttpClient::getConnectionConfig(const String& url) const {
@@ -442,7 +442,13 @@ uint16_t HttpClient::performRequestWithRetry(const String& url, uint16_t timeout
   uint16_t lastLatency = 0;
   
   while (retryCount <= config.maxRetries) {
+    // Feed watchdog before each request attempt
+    MemoryManager::getInstance().feedWatchdog();
+    
     lastLatency = performRequest(url, timeout, method, data);
+    
+    // Feed watchdog after each request attempt
+    MemoryManager::getInstance().feedWatchdog();
     
     if (lastLatency > 0) {
       // Success

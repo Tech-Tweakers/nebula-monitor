@@ -78,7 +78,7 @@ private:
   static const uint32_t CRITICAL_MEMORY_THRESHOLD = 20000; // 20KB
   static const uint32_t GC_INTERVAL_MS = 120000;         // 2 minutes
   static const uint32_t MEMORY_CHECK_INTERVAL_MS = 5000; // 5 seconds
-  static const uint32_t WATCHDOG_FEED_INTERVAL_MS = 1000; // 1 second
+  static const uint32_t WATCHDOG_FEED_INTERVAL_MS = 500; // 500ms - more aggressive heartbeat
   
   // String pool for efficient memory management
   struct StringPool {

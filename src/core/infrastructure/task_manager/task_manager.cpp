@@ -1,7 +1,7 @@
 #include "core/infrastructure/task_manager/task_manager.h"
 #include "core/domain/network_monitor/network_monitor.h"
-#include "ui/display_manager.h"
-#include "core/infrastructure/memory_manager.h"
+#include "ui/display_manager/display_manager.h"
+#include "core/infrastructure/memory_manager/memory_manager.h"
 #include <Arduino.h>
 
 // Static member definitions
@@ -167,6 +167,9 @@ void TaskManager::displayTask(void* pv) {
       displayManager->update();
     }
     
+    // Feed watchdog
+    MemoryManager::getInstance().feedWatchdog();
+    
     // Small delay to prevent CPU hogging
     vTaskDelay(pdMS_TO_TICKS(10));
   }
@@ -211,7 +214,7 @@ void TaskManager::scannerTask(void* pv) {
       lastMemoryCheck = now;
     }
     
-    // Feed watchdog
+    // Feed watchdog BEFORE any long operations
     MemoryManager::getInstance().feedWatchdog();
     
     // Update network monitor
@@ -224,6 +227,9 @@ void TaskManager::scannerTask(void* pv) {
       
       networkMonitor->update();
     }
+    
+    // Feed watchdog AFTER network operations
+    MemoryManager::getInstance().feedWatchdog();
     
     // Adaptive delay based on activity
     vTaskDelay(pdMS_TO_TICKS(20));
