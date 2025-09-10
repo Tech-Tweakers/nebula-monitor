@@ -306,41 +306,46 @@ String TelegramService::convertMillisToRealTime(unsigned long millisTime) const 
     unsigned long currentMillis = millis();
     unsigned long timeDiff = currentMillis - millisTime;
     
-    // Convert current NTP time to seconds since midnight
-    // Assuming format is HH:MM:SS
-    int colon1 = currentTimeStr.indexOf(':');
-    int colon2 = currentTimeStr.indexOf(':', colon1 + 1);
-    
-    if (colon1 > 0 && colon2 > 0) {
-      int hours = currentTimeStr.substring(0, colon1).toInt();
-      int minutes = currentTimeStr.substring(colon1 + 1, colon2).toInt();
-      int seconds = currentTimeStr.substring(colon2 + 1).toInt();
+    // Extract time part from DD/MM/YYYY HH:MM:SS format
+    int spaceIndex = currentTimeStr.indexOf(' ');
+    if (spaceIndex > 0) {
+      String timePart = currentTimeStr.substring(spaceIndex + 1);
       
-      // Convert to total seconds since midnight
-      unsigned long currentSeconds = hours * 3600 + minutes * 60 + seconds;
+      // Parse HH:MM:SS
+      int colon1 = timePart.indexOf(':');
+      int colon2 = timePart.indexOf(':', colon1 + 1);
       
-      // Subtract the time difference
-      unsigned long targetSeconds = currentSeconds - (timeDiff / 1000);
-      
-      // Handle day rollover
-      if (targetSeconds < 0) {
-        targetSeconds += 86400; // Add 24 hours
+      if (colon1 > 0 && colon2 > 0) {
+        int hours = timePart.substring(0, colon1).toInt();
+        int minutes = timePart.substring(colon1 + 1, colon2).toInt();
+        int seconds = timePart.substring(colon2 + 1).toInt();
+        
+        // Convert to total seconds since midnight
+        unsigned long currentSeconds = hours * 3600 + minutes * 60 + seconds;
+        
+        // Subtract the time difference
+        unsigned long targetSeconds = currentSeconds - (timeDiff / 1000);
+        
+        // Handle day rollover
+        if (targetSeconds < 0) {
+          targetSeconds += 86400; // Add 24 hours
+        }
+        
+        // Convert back to HH:MM:SS
+        int targetHours = (targetSeconds / 3600) % 24;
+        int targetMinutes = (targetSeconds / 60) % 60;
+        int targetSecs = targetSeconds % 60;
+        
+        String timeStr = "";
+        if (targetHours < 10) timeStr += "0";
+        timeStr += String(targetHours) + ":";
+        if (targetMinutes < 10) timeStr += "0";
+        timeStr += String(targetMinutes) + ":";
+        if (targetSecs < 10) timeStr += "0";
+        timeStr += String(targetSecs);
+        
+        return timeStr;
       }
-      
-      // Convert back to HH:MM:SS
-      int targetHours = (targetSeconds / 3600) % 24;
-      int targetMinutes = (targetSeconds / 60) % 60;
-      int targetSecs = targetSeconds % 60;
-      
-      String timeStr = "";
-      if (targetHours < 10) timeStr += "0";
-      timeStr += String(targetHours) + ":";
-      if (targetMinutes < 10) timeStr += "0";
-      timeStr += String(targetMinutes) + ":";
-      if (targetSecs < 10) timeStr += "0";
-      timeStr += String(targetSecs);
-      
-      return timeStr;
     }
   }
   
