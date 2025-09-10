@@ -387,7 +387,7 @@ bool TelegramService::sendMessage(const String& message, int targetIndex, bool i
   }
 
   http.addHeader("Content-Type", "application/json");
-  http.setTimeout(2000); // 2 second timeout
+  http.setTimeout(5000); // 5 second timeout
   
   // Create JSON payload with memory management
   DynamicJsonDocument doc(1024);
@@ -421,16 +421,24 @@ bool TelegramService::sendMessage(const String& message, int targetIndex, bool i
       Serial.println("[TELEGRAM] Message sent successfully");
       
       // Parse response to get real message_id from Telegram
+      Serial.println("[TELEGRAM] Parsing response for message_id...");
       String response = http.getString();
-      DynamicJsonDocument responseDoc(512);
-      DeserializationError error = deserializeJson(responseDoc, response);
+      Serial.printf("[TELEGRAM] Response length: %d bytes\n", response.length());
       
       uint32_t realMessageId = 0;
-      if (!error && responseDoc["ok"] == true) {
-        realMessageId = responseDoc["result"]["message_id"];
-        Serial.printf("[TELEGRAM] Got real message_id: %d\n", realMessageId);
+      if (response.length() > 0 && response.length() < 1024) {
+        DynamicJsonDocument responseDoc(1024); // Increased buffer size
+        DeserializationError error = deserializeJson(responseDoc, response);
+        
+        if (!error && responseDoc["ok"] == true) {
+          realMessageId = responseDoc["result"]["message_id"];
+          Serial.printf("[TELEGRAM] Got real message_id: %d\n", realMessageId);
+        } else {
+          Serial.printf("[TELEGRAM] JSON parse error: %s\n", error.c_str());
+          Serial.printf("[TELEGRAM] Response: %s\n", response.c_str());
+        }
       } else {
-        Serial.println("[TELEGRAM] WARNING: Could not parse message_id from response");
+        Serial.printf("[TELEGRAM] WARNING: Invalid response length: %d\n", response.length());
       }
       
       // Update thread management for this target
