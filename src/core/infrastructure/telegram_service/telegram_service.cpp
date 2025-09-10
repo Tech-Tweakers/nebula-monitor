@@ -420,26 +420,10 @@ bool TelegramService::sendMessage(const String& message, int targetIndex, bool i
     if (httpResponseCode == 200) {
       Serial.println("[TELEGRAM] Message sent successfully");
       
-      // Parse response to get real message_id from Telegram
-      Serial.println("[TELEGRAM] Parsing response for message_id...");
-      String response = http.getString();
-      Serial.printf("[TELEGRAM] Response length: %d bytes\n", response.length());
-      
-      uint32_t realMessageId = 0;
-      if (response.length() > 0 && response.length() < 1024) {
-        DynamicJsonDocument responseDoc(1024); // Increased buffer size
-        DeserializationError error = deserializeJson(responseDoc, response);
-        
-        if (!error && responseDoc["ok"] == true) {
-          realMessageId = responseDoc["result"]["message_id"];
-          Serial.printf("[TELEGRAM] Got real message_id: %d\n", realMessageId);
-        } else {
-          Serial.printf("[TELEGRAM] JSON parse error: %s\n", error.c_str());
-          Serial.printf("[TELEGRAM] Response: %s\n", response.c_str());
-        }
-      } else {
-        Serial.printf("[TELEGRAM] WARNING: Invalid response length: %d\n", response.length());
-      }
+      // TODO: Parse response to get real message_id from Telegram
+      // Temporarily disabled to prevent hanging
+      Serial.println("[TELEGRAM] Response parsing disabled to prevent hanging");
+      uint32_t realMessageId = 0; // Will be implemented later
       
       // Update thread management for this target
       if (targetIndex >= 0 && targetIndex < 6) {
