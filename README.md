@@ -1,6 +1,6 @@
-# 🌌 Nebula Monitor v2.4
+# 🌌 Nebula Monitor v2.5
 
-> **ESP32 TFT Network Monitor Dashboard** - Clean architecture network monitoring with manual garbage collection, SSL thread safety, and 24/7 stability
+> **ESP32 TFT Network Monitor Dashboard** - Complete modularization with Clean Architecture, intelligent timeout management, and 24/7 stability
 
 [![PlatformIO](https://img.shields.io/badge/PlatformIO-ESP32-blue.svg)](https://platformio.org/)
 [![LVGL](https://img.shields.io/badge/LVGL-8.3.11-green.svg)](https://lvgl.io/)
@@ -25,27 +25,37 @@
 
 ## 🎯 Overview
 
-**Nebula Monitor v2.4** is a production-ready network monitoring dashboard for ESP32 TFT displays. Built with clean architecture principles, it provides 24/7 stability through manual garbage collection, SSL thread safety, and intelligent memory management.
+**Nebula Monitor v2.5** is a production-ready network monitoring dashboard for ESP32 TFT displays. Built with complete Clean Architecture modularization, it provides 24/7 stability through intelligent timeout management, automatic alert reset, and full system control.
 
 ### 🎪 Key Features
 
-- **🏗️ Clean Architecture**: Modular design with dependency injection
-- **🧠 Manual Garbage Collection**: Prevents memory leaks and system reboots
-- **🔒 SSL Thread Safety**: Mutex-managed SSL operations for stability
-- **📊 Dynamic Footer**: 3 optimized modes with real-time data
-- **🚨 Telegram Alerts**: Smart notifications with cooldown management
-- **🔄 Hybrid Monitoring**: PING + Health Check for comprehensive coverage
+- **🏗️ Complete Clean Architecture**: Full modularization with dedicated folders
+- **⏱️ Intelligent Timeout Management**: 10s timeout with UNKNOWN status for slow connections
+- **🔄 Automatic Alert Reset**: Clean state after recovery for consistent behavior
+- **📅 Real-time Date/Time**: NTP-synchronized timestamps in all messages
+- **🚫 Watchdog Bypass**: Full application control without system interference
+- **💓 Aggressive Heartbeat**: 500ms watchdog feeding for maximum stability
+- **🚨 Enhanced Telegram Alerts**: Rich analytics with date/time information
+- **🔄 Hybrid Monitoring**: PING + Health Check with UNKNOWN status support
 - **⚡ 24/7 Stability**: Tested for continuous operation without reboots
 - **📱 Touch Interface**: Responsive LVGL-based UI with visual feedback
 
 ## ✨ Features
 
-### 🧠 Memory Management System
-- **Manual Garbage Collection**: Prevents memory leaks and system reboots
+### 🧠 Advanced Memory Management
+- **Intelligent Garbage Collection**: Deferred during active scans to prevent interruptions
 - **String Pool**: Optimized string allocation and deallocation
 - **Memory Monitoring**: Real-time heap and stack usage tracking
-- **Watchdog Feeding**: Automatic ESP32 watchdog timer management
+- **Watchdog Bypass**: Full application control without system interference
 - **Emergency Cleanup**: Critical memory pressure handling
+- **Heartbeat System**: Aggressive 500ms feeding for maximum stability
+
+### ⏱️ Intelligent Timeout Management
+- **10s Timeout**: Prevents system hangs on slow connections
+- **UNKNOWN Status**: New status for timeout scenarios (first implementation)
+- **Smart Recovery**: Automatic retry in next scan cycle
+- **Connection Quality Metrics**: UNKNOWN status provides network quality insights
+- **Race Condition Prevention**: GC deferred during active scans
 
 ### 🔒 SSL Thread Safety
 - **Mutex Management**: Thread-safe SSL operations
@@ -58,17 +68,23 @@
 - **Network Info**: `IP: 192.168.1.162 | -45 dBm`
 - **Performance**: `Cpu: 45% | Ram: 32% | Heap: 107KB`
 
-### 🚨 Telegram Alerts
+### 🚨 Enhanced Telegram Alerts
 - **Smart Thresholds**: Configurable failure count (default: 3)
 - **Cooldown Management**: 5-minute alert intervals
-- **Recovery Notifications**: Service restoration alerts
+- **Recovery Notifications**: Service restoration alerts with analytics
+- **Real-time Timestamps**: NTP-synchronized date/time in all messages
+- **Automatic Alert Reset**: Clean state after recovery for consistent behavior
+- **Rich Analytics**: First failure time, alert start time, recovery time
 - **Rich Formatting**: Emojis and detailed information
 
-### 🔄 Hybrid Monitoring
-- **PING**: Basic connectivity checks
+### 🔄 Enhanced Hybrid Monitoring
+- **PING**: Basic connectivity checks with 10s timeout
 - **Health Check**: API endpoint verification with JSON parsing
 - **Multi-target**: Up to 6 simultaneous targets
 - **Real-time Latency**: Response time tracking
+- **UNKNOWN Status**: New status for timeout scenarios (first implementation)
+- **Smart Recovery**: Automatic retry in next scan cycle
+- **Connection Quality Metrics**: UNKNOWN provides network quality insights
 
 
 ## 🔧 Hardware Requirements
@@ -204,14 +220,17 @@ ALERT_COOLDOWN_MS=300000
 - 🟢 **Green**: Target UP with good latency (<500ms)
 - 🔵 **Blue**: Target UP with slow latency (≥500ms)
 - 🔴 **Red**: Target DOWN
+- 🟡 **Yellow**: Target UNKNOWN (timeout/connection issues)
 
 ## 🔍 Network Monitoring
 
-### Hybrid Scanning
-- **PING**: Basic HTTP GET requests (5s timeout)
+### Enhanced Hybrid Scanning
+- **PING**: Basic HTTP GET requests (10s timeout)
 - **Health Check**: API endpoint verification with JSON parsing
 - **Sequential**: One target at a time for stability
 - **30s intervals**: Optimized for 24/7 operation
+- **UNKNOWN Status**: Timeout scenarios marked as UNKNOWN
+- **Smart Recovery**: Automatic retry in next scan cycle
 
 ### Supported Protocols
 - **HTTP/HTTPS**: Full protocol support
@@ -248,12 +267,26 @@ ALL_LOGS_ENABLED=true
 nebula-monitor/
 ├── src/
 │   ├── core/
-│   │   ├── application/        # NetworkMonitor
-│   │   ├── domain/            # Target, Alert, Status
-│   │   └── infrastructure/    # MemoryManager, SSLMutexManager, HttpClient, etc.
-│   ├── tasks/                 # TaskManager
-│   ├── ui/                    # DisplayManager, TouchHandler, LEDController
-│   └── config/                # ConfigLoader
+│   │   ├── domain/
+│   │   │   ├── alert/         # Alert management
+│   │   │   ├── status/        # Status definitions
+│   │   │   └── target/        # Target management
+│   │   └── infrastructure/
+│   │       ├── http_client/   # HTTP operations
+│   │       ├── memory_manager/ # Memory management
+│   │       ├── ntp_service/   # NTP synchronization
+│   │       ├── telegram_service/ # Telegram alerts
+│   │       ├── wifi_service/  # WiFi management
+│   │       ├── ssl_mutex_manager/ # SSL thread safety
+│   │       └── sdcard_manager/ # SD card operations
+│   ├── tasks/
+│   │   └── task_manager/      # FreeRTOS task management
+│   ├── ui/
+│   │   ├── display_manager/   # TFT display management
+│   │   ├── touch_handler/     # Touch input handling
+│   │   └── led_controller/    # RGB LED control
+│   └── config/
+│       └── config_loader/     # Configuration management
 ├── data/
 │   └── config.env             # External configuration
 ├── include/
@@ -308,21 +341,28 @@ Key debug messages: `[MAIN]`, `[NET]`, `[SCANNER]`, `[TELEGRAM]`, `[TOUCH]`, `[F
 
 ### Network Performance
 - **Scan Interval**: 30 seconds per cycle
-- **HTTP Timeout**: 5 seconds (standard), 7+ seconds (cloud services)
+- **HTTP Timeout**: 10 seconds (intelligent timeout management)
 - **Sequential Scanning**: One target at a time for stability
 - **Alert Cooldown**: 5 minutes between alerts
+- **UNKNOWN Status**: Timeout scenarios marked as UNKNOWN
+- **Smart Recovery**: Automatic retry in next scan cycle
 
-### Memory Management
-- **Garbage Collection**: Automatic every 2 minutes
+### Advanced Memory Management
+- **Intelligent Garbage Collection**: Deferred during active scans
 - **String Pool**: 10-string pool for optimization
-- **Watchdog Feeding**: Continuous to prevent reboots
+- **Watchdog Bypass**: Full application control
+- **Heartbeat System**: Aggressive 500ms feeding
 - **Memory Monitoring**: Real-time heap and stack tracking
+- **Race Condition Prevention**: GC deferred during scans
 
 ### 24/7 Stability
 - **Tested**: Continuous operation without reboots
-- **Memory Leaks**: Prevented by manual garbage collection
+- **Memory Leaks**: Prevented by intelligent garbage collection
 - **SSL Safety**: Thread-safe operations with mutex
 - **Error Handling**: Robust error recovery mechanisms
+- **Watchdog Bypass**: Full application control without system interference
+- **Intelligent Timeouts**: Prevents system hangs on slow connections
+- **Automatic Alert Reset**: Clean state for consistent behavior
 
 ## 🤝 Contributing
 

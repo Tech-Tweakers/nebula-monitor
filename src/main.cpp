@@ -50,7 +50,7 @@ void setup() {
   delay(2000);
   
   Serial.println("========================================");
-  Serial.println("    NEBULA MONITOR v2.4 - CLEAN ARCH");
+  Serial.println("    NEBULA MONITOR v2.5 - CLEAN ARCH");
   Serial.println("========================================");
   
   // 1. Load configuration
