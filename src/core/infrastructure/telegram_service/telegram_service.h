@@ -12,6 +12,10 @@ private:
   bool sendingMessage;
   Alert* alerts[6]; // Array of alert objects
   
+  // Reply thread management
+  uint32_t lastMessageIds[6]; // message_id por target para reply
+  bool isThreadActive[6];     // thread ativa por target
+  
   // Configuration
   static const uint8_t MAX_FAILURES_BEFORE_ALERT = 3;
   static const unsigned long ALERT_COOLDOWN_MS = 300000; // 5 minutes
@@ -49,7 +53,7 @@ private:
   String getCurrentTime() const;
   
   // HTTP communication
-  bool sendMessage(const String& message);
+  bool sendMessage(const String& message, int targetIndex = -1, bool isRecovery = false);
   
   // Alert logic
   bool isTimeForAlert(int targetIndex, bool isRecovery = false) const;

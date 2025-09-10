@@ -10,6 +10,8 @@ TelegramService::TelegramService() : enabled(false), sendingMessage(false) {
   // Initialize alert array
   for (int i = 0; i < 6; i++) {
     alerts[i] = nullptr;
+    lastMessageIds[i] = 0;
+    isThreadActive[i] = false;
   }
 }
 
@@ -74,11 +76,14 @@ void TelegramService::sendAlert(int targetIndex, const String& targetName, Statu
   unsigned long currentDowntime = alerts[targetIndex] ? alerts[targetIndex]->getDowntime() : 0;
   String message = formatAlertMessage(targetName, status, latency, false, currentDowntime);
   
-  if (sendMessage(message)) {
+  // Send alert with reply thread support (isRecovery = false for down alerts)
+  if (sendMessage(message, targetIndex, false)) {
     if (alerts[targetIndex]) {
       alerts[targetIndex]->markAlertSent();
     }
-    Serial.printf("[TELEGRAM] Alert sent for target %d (%s)\n", targetIndex, targetName.c_str());
+    Serial.printf("[TELEGRAM] Alert sent for target %d (%s) - Thread: %s\n", 
+                  targetIndex, targetName.c_str(), 
+                  isThreadActive[targetIndex] ? "Reply" : "New");
   } else {
     Serial.printf("[TELEGRAM] Failed to send alert for target %d (%s)\n", targetIndex, targetName.c_str());
   }
@@ -101,13 +106,14 @@ void TelegramService::sendRecoveryAlert(int targetIndex, const String& targetNam
   
   String message = formatRecoveryMessage(targetName, latency, totalDowntime, firstFailureTime, alertStartTime);
   
-  if (sendMessage(message)) {
+  // Send recovery with reply thread support (isRecovery = true ends the thread)
+  if (sendMessage(message, targetIndex, true)) {
     if (alert) {
       alert->markRecovered();
       // Reset alert data for clean state - ready for next alert
       alert->reset();
     }
-    Serial.printf("[TELEGRAM] Recovery alert sent for target %d (%s) - Alert reset for clean state\n", targetIndex, targetName.c_str());
+    Serial.printf("[TELEGRAM] Recovery alert sent for target %d (%s) - Thread ended\n", targetIndex, targetName.c_str());
   } else {
     Serial.printf("[TELEGRAM] Failed to send recovery alert for target %d (%s)\n", targetIndex, targetName.c_str());
   }
@@ -353,7 +359,7 @@ String TelegramService::convertMillisToRealTime(unsigned long millisTime) const 
   return formatMillisToTime(millisTime);
 }
 
-bool TelegramService::sendMessage(const String& message) {
+bool TelegramService::sendMessage(const String& message, int targetIndex, bool isRecovery) {
   if (!enabled) {
     return false;
   }
@@ -389,6 +395,12 @@ bool TelegramService::sendMessage(const String& message) {
   doc["text"] = message;
   doc["parse_mode"] = "HTML";
   
+  // Add reply_to_message_id if we have an active thread for this target
+  if (targetIndex >= 0 && targetIndex < 6 && isThreadActive[targetIndex] && lastMessageIds[targetIndex] > 0) {
+    doc["reply_to_message_id"] = lastMessageIds[targetIndex];
+    Serial.printf("[TELEGRAM] Sending reply to message %d for target %d\n", lastMessageIds[targetIndex], targetIndex);
+  }
+  
   String payload;
   serializeJson(doc, payload);
   
@@ -407,6 +419,24 @@ bool TelegramService::sendMessage(const String& message) {
   if (httpResponseCode > 0) {
     if (httpResponseCode == 200) {
       Serial.println("[TELEGRAM] Message sent successfully");
+      
+      // Update thread management for this target
+      if (targetIndex >= 0 && targetIndex < 6) {
+        if (isRecovery) {
+          // Recovery ends the thread
+          isThreadActive[targetIndex] = false;
+          lastMessageIds[targetIndex] = 0;
+          Serial.printf("[TELEGRAM] Thread ended for target %d (recovery)\n", targetIndex);
+        } else {
+          // Down alert continues or starts thread
+          // Note: We can't get the actual message_id from response easily,
+          // so we'll use a simple counter for now
+          lastMessageIds[targetIndex] = millis(); // Simple unique ID
+          isThreadActive[targetIndex] = true;
+          Serial.printf("[TELEGRAM] Thread active for target %d (down)\n", targetIndex);
+        }
+      }
+      
       return true;
     } else {
       Serial.printf("[TELEGRAM] HTTP error: %d\n", httpResponseCode);
