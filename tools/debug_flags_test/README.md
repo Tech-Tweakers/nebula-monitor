@@ -10,16 +10,18 @@ O sistema de logging condicional permite controlar a saída de logs através de 
 
 - `DEBUG_LOGS_ENABLED`: Controla logs de debug gerais
 - `TOUCH_LOGS_ENABLED`: Controla logs específicos de touch
+- `TELEGRAM_LOGS_ENABLED`: Controla logs específicos do Telegram
 - `ALL_LOGS_ENABLED`: Controla todos os logs (exceto ERROR e CRITICAL)
 
 ### Tipos de Log
 
 1. **LOG_DEBUG**: Logs de debug (controlados por DEBUG_LOGS_ENABLED ou ALL_LOGS_ENABLED)
 2. **LOG_TOUCH**: Logs de touch (controlados por TOUCH_LOGS_ENABLED ou ALL_LOGS_ENABLED)
-3. **LOG_INFO**: Logs informativos (controlados por ALL_LOGS_ENABLED)
-4. **LOG_WARN**: Logs de aviso (controlados por ALL_LOGS_ENABLED)
-5. **LOG_ERROR**: Logs de erro (sempre habilitados)
-6. **LOG_CRITICAL**: Logs críticos (sempre habilitados)
+3. **LOG_TELEGRAM**: Logs do Telegram (controlados por TELEGRAM_LOGS_ENABLED, DEBUG_LOGS_ENABLED ou ALL_LOGS_ENABLED)
+4. **LOG_INFO**: Logs informativos (controlados por ALL_LOGS_ENABLED)
+5. **LOG_WARN**: Logs de aviso (controlados por ALL_LOGS_ENABLED)
+6. **LOG_ERROR**: Logs de erro (sempre habilitados)
+7. **LOG_CRITICAL**: Logs críticos (sempre habilitados)
 
 ### Logs por Serviço
 
@@ -56,6 +58,7 @@ As flags podem ser configuradas no arquivo `data/config.env`:
 # Debug Configuration
 DEBUG_LOGS_ENABLED=true
 TOUCH_LOGS_ENABLED=true
+TELEGRAM_LOGS_ENABLED=true
 ALL_LOGS_ENABLED=true
 ```
 

@@ -160,6 +160,11 @@ bool ConfigLoader::isTouchLogsEnabled() {
   return value.equalsIgnoreCase("true");
 }
 
+bool ConfigLoader::isTelegramLogsEnabled() {
+  String value = getValue("TELEGRAM_LOGS_ENABLED", "false");
+  return value.equalsIgnoreCase("true");
+}
+
 bool ConfigLoader::isAllLogsEnabled() {
   String value = getValue("ALL_LOGS_ENABLED", "true");
   return value.equalsIgnoreCase("true");

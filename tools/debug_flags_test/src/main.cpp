@@ -3,6 +3,7 @@
 // Simulate configuration flags for testing
 bool DEBUG_LOGS_ENABLED = true;
 bool TOUCH_LOGS_ENABLED = true;
+bool TELEGRAM_LOGS_ENABLED = true;
 bool ALL_LOGS_ENABLED = true;
 
 // Conditional logging macros (simplified version)
@@ -11,6 +12,9 @@ bool ALL_LOGS_ENABLED = true;
 
 #define LOG_TOUCH(msg) if (TOUCH_LOGS_ENABLED || ALL_LOGS_ENABLED) { Serial.print("[TOUCH] "); Serial.println(msg); }
 #define LOG_TOUCH_F(format, ...) if (TOUCH_LOGS_ENABLED || ALL_LOGS_ENABLED) { Serial.printf("[TOUCH] " format "\n", ##__VA_ARGS__); }
+
+#define LOG_TELEGRAM(msg) if (TELEGRAM_LOGS_ENABLED || DEBUG_LOGS_ENABLED || ALL_LOGS_ENABLED) { Serial.print("[TELEGRAM] "); Serial.println(msg); }
+#define LOG_TELEGRAM_F(format, ...) if (TELEGRAM_LOGS_ENABLED || DEBUG_LOGS_ENABLED || ALL_LOGS_ENABLED) { Serial.printf("[TELEGRAM] " format "\n", ##__VA_ARGS__); }
 
 #define LOG_INFO(msg) if (ALL_LOGS_ENABLED) { Serial.print("[INFO] "); Serial.println(msg); }
 #define LOG_INFO_F(format, ...) if (ALL_LOGS_ENABLED) { Serial.printf("[INFO] " format "\n", ##__VA_ARGS__); }
@@ -41,6 +45,11 @@ void setup() {
   LOG_TOUCH("This is a touch message");
   LOG_TOUCH_F("Touch message with format: %s", "test");
   
+  // Test telegram logs
+  Serial.println("\n--- Testing TELEGRAM_LOGS_ENABLED ---");
+  LOG_TELEGRAM("This is a telegram message");
+  LOG_TELEGRAM_F("Telegram message with format: %s", "bot");
+  
   // Test info logs
   Serial.println("\n--- Testing ALL_LOGS_ENABLED (INFO) ---");
   LOG_INFO("This is an info message");
@@ -65,6 +74,7 @@ void setup() {
   Serial.println("\n--- Testing with flags disabled ---");
   LOG_DEBUG("This debug message should NOT appear");
   LOG_TOUCH("This touch message should NOT appear");
+  LOG_TELEGRAM("This telegram message should NOT appear");
   LOG_INFO("This info message should NOT appear");
   LOG_WARN("This warning message should NOT appear");
   LOG_ERROR("This error message should ALWAYS appear");
@@ -75,28 +85,45 @@ void setup() {
   // Test only DEBUG enabled
   DEBUG_LOGS_ENABLED = true;
   TOUCH_LOGS_ENABLED = false;
+  TELEGRAM_LOGS_ENABLED = false;
   ALL_LOGS_ENABLED = false;
   Serial.println("\n--- Only DEBUG enabled ---");
   LOG_DEBUG("This debug message should appear");
   LOG_TOUCH("This touch message should NOT appear");
+  LOG_TELEGRAM("This telegram message should appear (DEBUG enables it)");
   LOG_INFO("This info message should NOT appear");
   
   // Test only TOUCH enabled
   DEBUG_LOGS_ENABLED = false;
   TOUCH_LOGS_ENABLED = true;
+  TELEGRAM_LOGS_ENABLED = false;
   ALL_LOGS_ENABLED = false;
   Serial.println("\n--- Only TOUCH enabled ---");
   LOG_DEBUG("This debug message should NOT appear");
   LOG_TOUCH("This touch message should appear");
+  LOG_TELEGRAM("This telegram message should NOT appear");
+  LOG_INFO("This info message should NOT appear");
+  
+  // Test only TELEGRAM enabled
+  DEBUG_LOGS_ENABLED = false;
+  TOUCH_LOGS_ENABLED = false;
+  TELEGRAM_LOGS_ENABLED = true;
+  ALL_LOGS_ENABLED = false;
+  Serial.println("\n--- Only TELEGRAM enabled ---");
+  LOG_DEBUG("This debug message should NOT appear");
+  LOG_TOUCH("This touch message should NOT appear");
+  LOG_TELEGRAM("This telegram message should appear");
   LOG_INFO("This info message should NOT appear");
   
   // Test only ALL enabled
   DEBUG_LOGS_ENABLED = false;
   TOUCH_LOGS_ENABLED = false;
+  TELEGRAM_LOGS_ENABLED = false;
   ALL_LOGS_ENABLED = true;
   Serial.println("\n--- Only ALL enabled ---");
   LOG_DEBUG("This debug message should appear");
   LOG_TOUCH("This touch message should appear");
+  LOG_TELEGRAM("This telegram message should appear");
   LOG_INFO("This info message should appear");
   
   Serial.println("\n========================================");

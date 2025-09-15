@@ -23,8 +23,8 @@
 #define LOG_CRITICAL_F(format, ...) { Serial.printf("[CRITICAL] " format "\n", ##__VA_ARGS__); }
 
 // Service-specific logging macros
-#define LOG_TELEGRAM(msg) if (ConfigLoader::isDebugLogsEnabled() || ConfigLoader::isAllLogsEnabled()) { Serial.print("[TELEGRAM] "); Serial.println(msg); }
-#define LOG_TELEGRAM_F(format, ...) if (ConfigLoader::isDebugLogsEnabled() || ConfigLoader::isAllLogsEnabled()) { Serial.printf("[TELEGRAM] " format "\n", ##__VA_ARGS__); }
+#define LOG_TELEGRAM(msg) if (ConfigLoader::isTelegramLogsEnabled() || ConfigLoader::isDebugLogsEnabled() || ConfigLoader::isAllLogsEnabled()) { Serial.print("[TELEGRAM] "); Serial.println(msg); }
+#define LOG_TELEGRAM_F(format, ...) if (ConfigLoader::isTelegramLogsEnabled() || ConfigLoader::isDebugLogsEnabled() || ConfigLoader::isAllLogsEnabled()) { Serial.printf("[TELEGRAM] " format "\n", ##__VA_ARGS__); }
 
 #define LOG_DISPLAY(msg) if (ConfigLoader::isDebugLogsEnabled() || ConfigLoader::isAllLogsEnabled()) { Serial.print("[DISPLAY] "); Serial.println(msg); }
 #define LOG_DISPLAY_F(format, ...) if (ConfigLoader::isDebugLogsEnabled() || ConfigLoader::isAllLogsEnabled()) { Serial.printf("[DISPLAY] " format "\n", ##__VA_ARGS__); }
