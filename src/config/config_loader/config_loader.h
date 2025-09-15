@@ -35,6 +35,7 @@ public:
   
   // Debug Configuration
   static bool isDebugLogsEnabled();
+  static bool isTouchLogsEnabled();
   static bool isAllLogsEnabled();
   
   // Network Targets
