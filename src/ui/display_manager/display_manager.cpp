@@ -3,6 +3,7 @@
 #include "ui/led_controller/led_controller.h"
 #include <Arduino.h>
 #include <WiFi.h>
+#include "core/infrastructure/logger/logger.h"
 
 DisplayManager::DisplayManager() 
   : main_screen(nullptr), title_label(nullptr), footer(nullptr), footer_label(nullptr),
@@ -23,7 +24,7 @@ DisplayManager::~DisplayManager() {
 bool DisplayManager::initialize() {
   if (initialized) return true;
   
-  Serial.println("[DISPLAY] Initializing display manager...");
+  Serial_println("[DISPLAY] Initializing display manager...");
   
   // Initialize LVGL (this should be done in main setup)
   // lv_init() is called in main.cpp
@@ -38,7 +39,7 @@ bool DisplayManager::initialize() {
   LEDController::initialize();
   
   initialized = true;
-  Serial.println("[DISPLAY] Display manager initialized successfully!");
+  Serial_println("[DISPLAY] Display manager initialized successfully!");
   
   return true;
 }
@@ -75,7 +76,7 @@ void DisplayManager::update() {
 void DisplayManager::updateTargetStatus(int index, Status status, uint16_t latency) {
   if (index < 0 || index >= targetCount || !targets) return;
   
-  Serial.printf("[DISPLAY] updateTargetStatus called: index=%d, status=%d, latency=%d\n", 
+  Serial_printf("[DISPLAY] updateTargetStatus called: index=%d, status=%d, latency=%d\n", 
                index, status, latency);
   
   targets[index].setStatus(status);
@@ -85,13 +86,13 @@ void DisplayManager::updateTargetStatus(int index, Status status, uint16_t laten
 }
 
 void DisplayManager::onScanStarted() {
-  Serial.println("[DISPLAY] Scan started");
+  Serial_println("[DISPLAY] Scan started");
   LEDController::setStatus(LEDStatus::SCANNING);
   updateFooter();
 }
 
 void DisplayManager::onScanCompleted() {
-  Serial.println("[DISPLAY] Scan completed");
+  Serial_println("[DISPLAY] Scan completed");
   
   // Determine LED status based on targets
   bool anyDown = false;
@@ -147,11 +148,11 @@ void DisplayManager::createMainScreen() {
 
 void DisplayManager::createStatusItems() {
   if (!targets) {
-    Serial.println("[DISPLAY] ERROR: No targets provided!");
+    Serial_println("[DISPLAY] ERROR: No targets provided!");
     return;
   }
   
-  Serial.printf("[DISPLAY] Creating status items for %d targets\n", targetCount);
+  Serial_printf("[DISPLAY] Creating status items for %d targets\n", targetCount);
   
   // Find the main form container (it should be the second child of main_screen)
   lv_obj_t* main_form = nullptr;
@@ -160,13 +161,13 @@ void DisplayManager::createStatusItems() {
   }
   
   if (!main_form) {
-    Serial.println("[DISPLAY] ERROR: Main form not found!");
+    Serial_println("[DISPLAY] ERROR: Main form not found!");
     return;
   }
   
   // Create status items for each target
   for (int i = 0; i < targetCount && i < 6; i++) {
-    Serial.printf("[DISPLAY] Creating status item %d for target: %s\n", i, targets[i].getName().c_str());
+    Serial_printf("[DISPLAY] Creating status item %d for target: %s\n", i, targets[i].getName().c_str());
     
     // Status item container
     lv_obj_t* status_item = lv_obj_create(main_form);
@@ -195,7 +196,7 @@ void DisplayManager::createStatusItems() {
     name_labels[i] = name_label;
     latency_labels[i] = latency_label;
     
-    Serial.printf("[DISPLAY] Status item %d created successfully\n", i);
+    Serial_printf("[DISPLAY] Status item %d created successfully\n", i);
     
     // Update initial status
     updateStatusItem(i);
@@ -295,7 +296,7 @@ void DisplayManager::updateStatusItem(int index) {
   
   Target& target = targets[index];
   
-  Serial.printf("[DISPLAY] Updating status item %d: %s - %s (%d ms)\n", 
+  Serial_printf("[DISPLAY] Updating status item %d: %s - %s (%d ms)\n", 
                index, target.getName().c_str(), 
                target.getStatusText().c_str(), target.getLatency());
   
@@ -303,16 +304,16 @@ void DisplayManager::updateStatusItem(int index) {
   if (latency_labels[index] && lv_obj_is_valid(latency_labels[index])) {
     String latencyText = target.getLatencyText();
     lv_label_set_text(latency_labels[index], latencyText.c_str());
-    Serial.printf("[DISPLAY] Updated latency label %d: %s\n", index, latencyText.c_str());
+    Serial_printf("[DISPLAY] Updated latency label %d: %s\n", index, latencyText.c_str());
   } else {
-    Serial.printf("[DISPLAY] ERROR: Latency label %d is null or invalid!\n", index);
+    Serial_printf("[DISPLAY] ERROR: Latency label %d is null or invalid!\n", index);
   }
   
   // Update colors with safety check
   if (status_labels[index] && lv_obj_is_valid(status_labels[index])) {
     setStatusItemColor(index, target.getStatus(), target.getLatency());
   } else {
-    Serial.printf("[DISPLAY] ERROR: Status label %d is null or invalid!\n", index);
+    Serial_printf("[DISPLAY] ERROR: Status label %d is null or invalid!\n", index);
   }
   
   // Force a gentle refresh to show changes

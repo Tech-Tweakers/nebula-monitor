@@ -2,6 +2,7 @@
 #include "config/config_loader/config_loader.h"
 #include "core/infrastructure/memory_manager/memory_manager.h"
 #include <Arduino.h>
+#include "core/infrastructure/logger/logger.h"
 
 NetworkMonitor::NetworkMonitor() 
   : wifiService(nullptr), httpClient(nullptr), telegramService(nullptr),
@@ -16,11 +17,11 @@ NetworkMonitor::~NetworkMonitor() {
 bool NetworkMonitor::initialize() {
   if (initialized) return true;
   
-  Serial.println("[NETWORK_MONITOR] Initializing...");
+  Serial_println("[NETWORK_MONITOR] Initializing...");
   
   // Load targets from configuration
   if (!loadTargets()) {
-    Serial.println("[NETWORK_MONITOR] ERROR: Failed to load targets!");
+    Serial_println("[NETWORK_MONITOR] ERROR: Failed to load targets!");
     return false;
   }
   
@@ -40,7 +41,7 @@ bool NetworkMonitor::initialize() {
   }
   
   initialized = true;
-  Serial.printf("[NETWORK_MONITOR] Initialized with %d targets\n", targetCount);
+  Serial_printf("[NETWORK_MONITOR] Initialized with %d targets\n", targetCount);
   
   return true;
 }
@@ -76,7 +77,7 @@ void NetworkMonitor::update() {
 
 void NetworkMonitor::startScanning() {
   if (scanning) {
-    Serial.println("[NETWORK_MONITOR] WARNING: Scan already in progress, skipping");
+    Serial_println("[NETWORK_MONITOR] WARNING: Scan already in progress, skipping");
     return;
   }
   
@@ -84,7 +85,7 @@ void NetworkMonitor::startScanning() {
   lastScanTime = millis();
   scanStartTime = millis();
   
-  Serial.println("[NETWORK_MONITOR] Starting scan cycle...");
+  Serial_println("[NETWORK_MONITOR] Starting scan cycle...");
   
   // Notify display that scan started
   if (displayManager) {
@@ -100,13 +101,13 @@ void NetworkMonitor::startScanning() {
     
     // Check if scan is taking too long (30 seconds max per scan)
     if (millis() - scanStartTime > 30000) {
-      Serial.println("[NETWORK_MONITOR] WARNING: Scan timeout, stopping remaining targets");
+      Serial_println("[NETWORK_MONITOR] WARNING: Scan timeout, stopping remaining targets");
       break;
     }
     
     // Check memory before each target
     if (MemoryManager::getInstance().isMemoryCritical()) {
-      Serial.println("[NETWORK_MONITOR] WARNING: Critical memory, stopping scan");
+      Serial_println("[NETWORK_MONITOR] WARNING: Critical memory, stopping scan");
       break;
     }
     
@@ -118,7 +119,7 @@ void NetworkMonitor::startScanning() {
     // Check if this target took too long (10 seconds max per target)
     unsigned long targetDuration = millis() - targetStartTime;
     if (targetDuration > 10000) {
-      Serial.printf("[NETWORK_MONITOR] WARNING: Target %d took %lums (too long)\n", i, targetDuration);
+      Serial_printf("[NETWORK_MONITOR] WARNING: Target %d took %lums (too long)\n", i, targetDuration);
     }
     
     delay(200); // Small delay between targets
@@ -128,7 +129,7 @@ void NetworkMonitor::startScanning() {
   scanning = false;
   
   lastScanDuration = millis() - scanStartTime;
-  Serial.printf("[NETWORK_MONITOR] Scan cycle complete in %lums\n", lastScanDuration);
+  Serial_printf("[NETWORK_MONITOR] Scan cycle complete in %lums\n", lastScanDuration);
   
   // Notify display that scan completed
   if (displayManager) {
@@ -138,14 +139,14 @@ void NetworkMonitor::startScanning() {
 
 void NetworkMonitor::stopScanning() {
   scanning = false;
-  Serial.println("[NETWORK_MONITOR] Scanning stopped");
+  Serial_println("[NETWORK_MONITOR] Scanning stopped");
 }
 
 bool NetworkMonitor::loadTargets() {
   targetCount = ConfigLoader::getTargetCount();
   
   if (targetCount == 0) {
-    Serial.println("[NETWORK_MONITOR] No targets configured, using defaults");
+    Serial_println("[NETWORK_MONITOR] No targets configured, using defaults");
     // Set up default targets
     targetCount = 6;
     targets[0] = Target("Proxmox HV", "http://192.168.1.128:8006/", "", PING);
@@ -170,7 +171,7 @@ bool NetworkMonitor::loadTargets() {
     targets[i].setStatus(UNKNOWN);
     targets[i].setLatency(0);
     
-    Serial.printf("[NETWORK_MONITOR] Target %d: %s | %s | %s | %s\n", 
+    Serial_printf("[NETWORK_MONITOR] Target %d: %s | %s | %s | %s\n", 
                  i + 1, name.c_str(), url.c_str(), 
                  healthEndpoint.length() > 0 ? healthEndpoint.c_str() : "null",
                  monitorTypeStr.c_str());
@@ -181,7 +182,7 @@ bool NetworkMonitor::loadTargets() {
 
 void NetworkMonitor::scanTarget(int index) {
   if (index < 0 || index >= targetCount || !httpClient) {
-    Serial.printf("[NETWORK_MONITOR] ERROR: Invalid scan target %d\n", index);
+    Serial_printf("[NETWORK_MONITOR] ERROR: Invalid scan target %d\n", index);
     return;
   }
   
@@ -192,13 +193,13 @@ void NetworkMonitor::scanTarget(int index) {
   const char* name = target.getName().c_str();
   const char* typeStr = (target.getMonitorType() == HEALTH_CHECK) ? "HEALTH_CHECK" : "PING";
   
-  Serial.printf("[NETWORK_MONITOR] Checking %s (type: %s)...\n", name, typeStr);
+  Serial_printf("[NETWORK_MONITOR] Checking %s (type: %s)...\n", name, typeStr);
   
   uint16_t latency = 0;
   
   // Check memory before proceeding
   if (MemoryManager::getInstance().isMemoryCritical()) {
-    Serial.println("[NETWORK_MONITOR] ERROR: Critical memory, skipping target");
+    Serial_println("[NETWORK_MONITOR] ERROR: Critical memory, skipping target");
     updateTargetStatus(index, DOWN, 0);
     return;
   }
@@ -227,7 +228,7 @@ void NetworkMonitor::scanTarget(int index) {
   // Check if this target took too long
   unsigned long targetDuration = millis() - targetStartTime;
   if (targetDuration > 11000) { // 11s = timeout + margem
-    Serial.printf("[NETWORK_MONITOR] WARNING: Target %s took %lums (timeout)\n", name, targetDuration);
+    Serial_printf("[NETWORK_MONITOR] WARNING: Target %s took %lums (timeout)\n", name, targetDuration);
   }
   
   // Estratégia inteligente: se travou ou demorou demais, marca como UNKNOWN
@@ -236,7 +237,7 @@ void NetworkMonitor::scanTarget(int index) {
     newStatus = UP;
   } else if (targetDuration > 11000) {
     newStatus = UNKNOWN; // Timeout = UNKNOWN (primeira vez no código!)
-    Serial.printf("[NETWORK_MONITOR] Target %s marked as UNKNOWN due to timeout\n", name);
+    Serial_printf("[NETWORK_MONITOR] Target %s marked as UNKNOWN due to timeout\n", name);
   } else {
     newStatus = DOWN;
   }
@@ -251,7 +252,7 @@ void NetworkMonitor::updateTargetStatus(int index, Status status, uint16_t laten
   target.setStatus(status);
   target.setLatency(latency);
   
-  Serial.printf("[NETWORK_MONITOR] updateTargetStatus: %s: %s (%d ms)\n", 
+  Serial_printf("[NETWORK_MONITOR] updateTargetStatus: %s: %s (%d ms)\n", 
                target.getName().c_str(), 
                target.getStatusText().c_str(), 
                latency);
@@ -275,11 +276,11 @@ uint16_t NetworkMonitor::performSafeHealthCheck(const String& url, const String&
   
   // Enhanced URL safety checks
   if (url.length() > 200) {
-    Serial.println("[NETWORK_MONITOR] ERROR: URL too long for health check");
+    Serial_println("[NETWORK_MONITOR] ERROR: URL too long for health check");
     return 0;
   }
   
-  Serial.printf("[NETWORK_MONITOR] Performing enhanced health check: %s%s\n", url.c_str(), endpoint.c_str());
+  Serial_printf("[NETWORK_MONITOR] Performing enhanced health check: %s%s\n", url.c_str(), endpoint.c_str());
   
   // Use the enhanced health check with intelligent timeout and retry logic
   uint16_t latency = httpClient->healthCheck(url, endpoint, 0); // 0 = auto-calculate timeout
@@ -292,14 +293,14 @@ uint16_t NetworkMonitor::performSafeHealthCheck(const String& url, const String&
     if (response.length() > 0 && response.length() < 1000) {
       // Enhanced response validation
       if (httpClient->isHealthyResponse(response)) {
-        Serial.printf("[NETWORK_MONITOR] Health check successful: %d ms (HTTP %d)\n", latency, httpCode);
+        Serial_printf("[NETWORK_MONITOR] Health check successful: %d ms (HTTP %d)\n", latency, httpCode);
       } else {
-        Serial.printf("[NETWORK_MONITOR] Health check FAILED: Unhealthy response detected (HTTP %d)\n", httpCode);
-        Serial.printf("[NETWORK_MONITOR] Response: %s\n", response.c_str());
+        Serial_printf("[NETWORK_MONITOR] Health check FAILED: Unhealthy response detected (HTTP %d)\n", httpCode);
+        Serial_printf("[NETWORK_MONITOR] Response: %s\n", response.c_str());
         return 0;
       }
     } else {
-      Serial.printf("[NETWORK_MONITOR] Health check successful: %d ms (HTTP %d, no response validation)\n", latency, httpCode);
+      Serial_printf("[NETWORK_MONITOR] Health check successful: %d ms (HTTP %d, no response validation)\n", latency, httpCode);
     }
   } else {
     // Check error category for better logging
@@ -308,23 +309,23 @@ uint16_t NetworkMonitor::performSafeHealthCheck(const String& url, const String&
     
     switch (errorCategory) {
       case ErrorCategory::SSL_ERROR:
-        Serial.printf("[NETWORK_MONITOR] Health check failed: SSL/TLS error (HTTP %d)\n", httpCode);
+        Serial_printf("[NETWORK_MONITOR] Health check failed: SSL/TLS error (HTTP %d)\n", httpCode);
         break;
       case ErrorCategory::TEMPORARY:
-        Serial.printf("[NETWORK_MONITOR] Health check failed: Temporary network issue (HTTP %d)\n", httpCode);
+        Serial_printf("[NETWORK_MONITOR] Health check failed: Temporary network issue (HTTP %d)\n", httpCode);
         break;
       case ErrorCategory::PERMANENT:
-        Serial.printf("[NETWORK_MONITOR] Health check failed: Permanent error (HTTP %d)\n", httpCode);
+        Serial_printf("[NETWORK_MONITOR] Health check failed: Permanent error (HTTP %d)\n", httpCode);
         break;
       default:
-        Serial.printf("[NETWORK_MONITOR] Health check failed: Unknown error (HTTP %d)\n", httpCode);
+        Serial_printf("[NETWORK_MONITOR] Health check failed: Unknown error (HTTP %d)\n", httpCode);
         break;
     }
     
     // Log response details for debugging
     String response = httpClient->getLastResponse();
     if (response.length() > 0) {
-      Serial.printf("[NETWORK_MONITOR] Response: %s\n", response.c_str());
+      Serial_printf("[NETWORK_MONITOR] Response: %s\n", response.c_str());
     }
   }
   
@@ -332,13 +333,13 @@ uint16_t NetworkMonitor::performSafeHealthCheck(const String& url, const String&
 }
 
 void NetworkMonitor::notifyDisplayUpdate(int index, Status status, uint16_t latency) {
-  Serial.printf("[NETWORK_MONITOR] notifyDisplayUpdate: index=%d, status=%d, latency=%d\n", 
+  Serial_printf("[NETWORK_MONITOR] notifyDisplayUpdate: index=%d, status=%d, latency=%d\n", 
                index, status, latency);
   
   if (displayManager) {
     displayManager->updateTargetStatus(index, status, latency);
   } else {
-    Serial.println("[NETWORK_MONITOR] ERROR: displayManager is null!");
+    Serial_println("[NETWORK_MONITOR] ERROR: displayManager is null!");
   }
 }
 
@@ -350,25 +351,25 @@ MonitorType NetworkMonitor::parseMonitorType(const String& type) const {
 }
 
 void NetworkMonitor::printPerformanceMetrics() const {
-  Serial.println("\n=== NETWORK MONITOR PERFORMANCE ===");
-  Serial.printf("Targets: %d\n", targetCount);
-  Serial.printf("Scanning: %s\n", scanning ? "YES" : "NO");
-  Serial.printf("Scan Interval: %lu ms\n", scanInterval);
-  Serial.printf("Last Scan: %lu ms ago\n", millis() - lastScanTime);
+  Serial_println("\n=== NETWORK MONITOR PERFORMANCE ===");
+  Serial_printf("Targets: %d\n", targetCount);
+  Serial_printf("Scanning: %s\n", scanning ? "YES" : "NO");
+  Serial_printf("Scan Interval: %lu ms\n", scanInterval);
+  Serial_printf("Last Scan: %lu ms ago\n", millis() - lastScanTime);
   
   if (httpClient) {
-    Serial.println("\n--- HTTP Client Metrics ---");
+    Serial_println("\n--- HTTP Client Metrics ---");
     httpClient->printMetrics();
   }
   
-  Serial.println("===============================\n");
+  Serial_println("===============================\n");
 }
 
 void NetworkMonitor::resetPerformanceMetrics() {
   if (httpClient) {
     httpClient->resetMetrics();
   }
-  Serial.println("[NETWORK_MONITOR] Performance metrics reset");
+  Serial_println("[NETWORK_MONITOR] Performance metrics reset");
 }
 
 bool NetworkMonitor::isScanStuck() const {
@@ -382,7 +383,7 @@ bool NetworkMonitor::isScanStuck() const {
 void NetworkMonitor::forceStopScan() {
   if (!scanning) return;
   
-  Serial.println("[NETWORK_MONITOR] EMERGENCY: Force stopping stuck scan!");
+  Serial_println("[NETWORK_MONITOR] EMERGENCY: Force stopping stuck scan!");
   scanning = false;
   
   // Notify display that scan was force-stopped

@@ -1,4 +1,5 @@
 #include "core/domain/alert/alert.h"
+#include "core/infrastructure/logger/logger.h"
 
 Alert::Alert(int index, const String& name) 
   : targetIndex(index), targetName(name ? name : "Unknown"), 
@@ -19,25 +20,25 @@ void Alert::updateStatus(Status newStatus, uint16_t latency) {
       failureCount++;
       if (failureCount == 1) {
         firstFailureTime = millis();
-        Serial.printf("[ALERT] %s: Downtime started\n", targetName.c_str());
+        Serial_printf("[ALERT] %s: Downtime started\n", targetName.c_str());
       }
-      Serial.printf("[ALERT] %s: Failure #%d\n", targetName.c_str(), failureCount);
+      Serial_printf("[ALERT] %s: Failure #%d\n", targetName.c_str(), failureCount);
     } else if (newStatus == UP && lastStatus == DOWN) {
       // Recovery detected
-      Serial.printf("[ALERT] %s: Recovery detected\n", targetName.c_str());
+      Serial_printf("[ALERT] %s: Recovery detected\n", targetName.c_str());
       if (alertSent) {
         // Don't mark as recovered yet - let the recovery logic handle it
       } else {
         // Reset downtime tracking even if no alert was sent
         firstFailureTime = 0;
         failureCount = 0;
-        Serial.printf("[ALERT] %s: Quick recovery - resetting downtime tracking\n", targetName.c_str());
+        Serial_printf("[ALERT] %s: Quick recovery - resetting downtime tracking\n", targetName.c_str());
       }
     }
   } else if (newStatus == DOWN) {
     // Continuous failure
     failureCount++;
-    Serial.printf("[ALERT] %s: Continuous failure #%d\n", targetName.c_str(), failureCount);
+    Serial_printf("[ALERT] %s: Continuous failure #%d\n", targetName.c_str(), failureCount);
   }
 }
 
@@ -73,7 +74,7 @@ void Alert::markAlertSent() {
   lastAlertTime = millis();
   alertDowntimeStart = firstFailureTime > 0 ? firstFailureTime : millis();
   isActive = true;
-  Serial.printf("[ALERT] %s: Alert marked as sent\n", targetName.c_str());
+  Serial_printf("[ALERT] %s: Alert marked as sent\n", targetName.c_str());
 }
 
 void Alert::markRecovered() {
@@ -88,7 +89,7 @@ void Alert::markRecovered() {
   alertDowntimeStart = 0;
   isActive = false;
   lastAlertTime = millis();
-  Serial.printf("[ALERT] %s: Marked as recovered (total downtime: %lu seconds)\n", targetName.c_str(), totalDowntime);
+  Serial_printf("[ALERT] %s: Marked as recovered (total downtime: %lu seconds)\n", targetName.c_str(), totalDowntime);
 }
 
 unsigned long Alert::getDowntime() const {
@@ -121,11 +122,11 @@ void Alert::reset() {
   currentStatus = UNKNOWN;
   lastStatus = UNKNOWN;
   
-  Serial.printf("[ALERT] %s: Reset complete - clean state for new alerts\n", targetName.c_str());
+  Serial_printf("[ALERT] %s: Reset complete - clean state for new alerts\n", targetName.c_str());
 }
 
 void Alert::printState() const {
-  Serial.printf("[ALERT] %s: status=%d, failures=%d, active=%s, sent=%s\n",
+  Serial_printf("[ALERT] %s: status=%d, failures=%d, active=%s, sent=%s\n",
                targetName.c_str(), currentStatus, failureCount,
                isActive ? "true" : "false", alertSent ? "true" : "false");
 }

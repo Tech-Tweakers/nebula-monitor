@@ -1,4 +1,5 @@
 #include "core/domain/target/target.h"
+#include "core/infrastructure/logger/logger.h"
 
 Target::Target(const String& name, const String& url, 
                const String& healthEndpoint, MonitorType type) 

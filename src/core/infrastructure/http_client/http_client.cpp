@@ -1,6 +1,7 @@
 #include "core/infrastructure/http_client/http_client.h"
 #include "config/config_loader/config_loader.h"
 #include "core/infrastructure/memory_manager/memory_manager.h"
+#include "core/infrastructure/logger/logger.h"
 
 HttpClient::HttpClient() {
   lastResponse = "";
@@ -33,7 +34,7 @@ HttpClient::~HttpClient() {
 uint16_t HttpClient::ping(const String& url, uint16_t timeout) {
   // Enhanced safety checks
   if (url.length() > 200) {
-    Serial.println("[HTTP] ERROR: URL too long for ping");
+    Serial_println("[HTTP] ERROR: URL too long for ping");
     return 0;
   }
   
@@ -46,7 +47,7 @@ uint16_t HttpClient::ping(const String& url, uint16_t timeout) {
 uint16_t HttpClient::healthCheck(const String& url, const String& endpoint, uint16_t timeout) {
   // Enhanced safety checks
   if (url.length() > 200) {
-    Serial.println("[HTTP] ERROR: URL too long for health check");
+    Serial_println("[HTTP] ERROR: URL too long for health check");
     return 0;
   }
   
@@ -62,7 +63,7 @@ uint16_t HttpClient::healthCheck(const String& url, const String& endpoint, uint
   }
   
   if (fullUrl.length() > 300) {
-    Serial.println("[HTTP] ERROR: Full URL too long for health check");
+    Serial_println("[HTTP] ERROR: Full URL too long for health check");
     return 0;
   }
   
@@ -74,20 +75,20 @@ uint16_t HttpClient::healthCheck(const String& url, const String& endpoint, uint
   if (latency > 0) {
     // Check HTTP status code first
     if (lastHttpCode < 200 || lastHttpCode >= 300) {
-      Serial.printf("[HTTP] Health check failed: HTTP %d\n", lastHttpCode);
+      Serial_printf("[HTTP] Health check failed: HTTP %d\n", lastHttpCode);
       return 0;
     }
     
     // Enhanced health response validation
     if (lastResponse.length() > 0 && lastResponse.length() < 1000) {
       if (!isHealthyResponse(lastResponse)) {
-        Serial.printf("[HTTP] Health check failed: Unhealthy response detected (HTTP %d)\n", lastHttpCode);
+        Serial_printf("[HTTP] Health check failed: Unhealthy response detected (HTTP %d)\n", lastHttpCode);
         return 0;
       }
     }
     
     // Log successful health check with details
-    Serial.printf("[HTTP] Health check successful: %d ms (HTTP %d)\n", latency, lastHttpCode);
+    Serial_printf("[HTTP] Health check successful: %d ms (HTTP %d)\n", latency, lastHttpCode);
   }
   
   return latency;
@@ -191,25 +192,25 @@ void HttpClient::clearHeaders() {
 
 uint16_t HttpClient::performRequest(const String& url, uint16_t timeout, const String& method, const String& data) {
   if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("[HTTP] WiFi not connected");
+    Serial_println("[HTTP] WiFi not connected");
     return 0;
   }
   
   // Check memory before proceeding
   if (MemoryManager::getInstance().isMemoryCritical()) {
-    Serial.println("[HTTP] ERROR: Critical memory condition, skipping request");
+    Serial_println("[HTTP] ERROR: Critical memory condition, skipping request");
     return 0;
   }
   
   // Limit URL length to prevent stack overflow
   if (url.length() > 500) {
-    Serial.println("[HTTP] ERROR: URL too long");
+    Serial_println("[HTTP] ERROR: URL too long");
     return 0;
   }
   
   // Limit data length
   if (data.length() > 1000) {
-    Serial.println("[HTTP] ERROR: Data too long");
+    Serial_println("[HTTP] ERROR: Data too long");
     return 0;
   }
   
@@ -248,7 +249,7 @@ uint16_t HttpClient::performRequest(const String& url, uint16_t timeout, const S
         String response = http.getString();
         if (response.length() > 2000) {
           lastResponse = response.substring(0, 2000) + "...";
-          Serial.println("[HTTP] WARNING: Response truncated due to size");
+          Serial_println("[HTTP] WARNING: Response truncated due to size");
         } else {
           lastResponse = response;
         }
@@ -277,7 +278,7 @@ uint16_t HttpClient::performRequest(const String& url, uint16_t timeout, const S
         String response = http.getString();
         if (response.length() > 2000) {
           lastResponse = response.substring(0, 2000) + "...";
-          Serial.println("[HTTP] WARNING: Response truncated due to size");
+          Serial_println("[HTTP] WARNING: Response truncated due to size");
         } else {
           lastResponse = response;
         }
@@ -294,7 +295,7 @@ uint16_t HttpClient::performRequest(const String& url, uint16_t timeout, const S
   lastHttpCode = httpCode;
   
   uint32_t duration = millis() - startTime;
-  Serial.printf("[HTTP] %s -> code=%d (%lums)\n", url.c_str(), httpCode, (unsigned long)duration);
+  Serial_printf("[HTTP] %s -> code=%d (%lums)\n", url.c_str(), httpCode, (unsigned long)duration);
   
   if (httpCode > 0 && httpCode != 400) {
     if (duration > 65535) duration = 65535;
@@ -473,7 +474,7 @@ uint16_t HttpClient::performRequestWithRetry(const String& url, uint16_t timeout
     
     retryCount++;
     if (retryCount <= config.maxRetries) {
-      Serial.printf("[HTTP] Retry %d/%d for %s\n", retryCount, config.maxRetries, url.c_str());
+      Serial_printf("[HTTP] Retry %d/%d for %s\n", retryCount, config.maxRetries, url.c_str());
       vTaskDelay(pdMS_TO_TICKS(1000 * retryCount)); // Exponential backoff
     }
   }
@@ -483,14 +484,14 @@ uint16_t HttpClient::performRequestWithRetry(const String& url, uint16_t timeout
 }
 
 void HttpClient::printMetrics() const {
-  Serial.println("\n=== HTTP CLIENT METRICS ===");
-  Serial.printf("Total Requests: %lu\n", metrics.totalRequests);
-  Serial.printf("Successful: %lu\n", metrics.successfulRequests);
-  Serial.printf("SSL Errors: %lu\n", metrics.sslErrors);
-  Serial.printf("Timeout Errors: %lu\n", metrics.timeoutErrors);
-  Serial.printf("Success Rate: %.1f%%\n", getSuccessRate());
-  Serial.printf("Last Error Category: %d\n", (int)metrics.lastErrorCategory);
-  Serial.println("========================\n");
+  Serial_println("\n=== HTTP CLIENT METRICS ===");
+  Serial_printf("Total Requests: %lu\n", metrics.totalRequests);
+  Serial_printf("Successful: %lu\n", metrics.successfulRequests);
+  Serial_printf("SSL Errors: %lu\n", metrics.sslErrors);
+  Serial_printf("Timeout Errors: %lu\n", metrics.timeoutErrors);
+  Serial_printf("Success Rate: %.1f%%\n", getSuccessRate());
+  Serial_printf("Last Error Category: %d\n", (int)metrics.lastErrorCategory);
+  Serial_println("========================\n");
 }
 
 void HttpClient::resetMetrics() {
@@ -527,13 +528,13 @@ void HttpClient::logErrorIntelligently(const String& message, ErrorCategory cate
   }
   
   // Log the error
-  Serial.printf("[HTTP] %s", message.c_str());
+  Serial_printf("[HTTP] %s", message.c_str());
   
   // If we've been suppressing errors, show the count
   if (metrics.errorCountSinceLastLog > 0) {
-    Serial.printf(" (suppressed %lu similar errors)", metrics.errorCountSinceLastLog);
+    Serial_printf(" (suppressed %lu similar errors)", metrics.errorCountSinceLastLog);
   }
-  Serial.println();
+  Serial_println();
   
   // Update logging state
   metrics.lastLogTime = currentTime;

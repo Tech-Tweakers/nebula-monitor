@@ -2,6 +2,14 @@
 #include <Arduino.h>
 #include "config/config_loader/config_loader.h"
 
+// Silent mode macro - completely disables Serial when SILENT_MODE is enabled
+#define SERIAL_IF_NOT_SILENT if (!ConfigLoader::isSilentMode())
+
+// Direct Serial replacement macros for silent mode
+#define Serial_print(msg) SERIAL_IF_NOT_SILENT { Serial.print(msg); }
+#define Serial_println(msg) SERIAL_IF_NOT_SILENT { Serial.println(msg); }
+#define Serial_printf(format, ...) SERIAL_IF_NOT_SILENT { Serial.printf(format, ##__VA_ARGS__); }
+
 // Conditional logging macros
 #define LOG_DEBUG(msg) if (!ConfigLoader::isSilentMode() && (ConfigLoader::isDebugLogsEnabled() || ConfigLoader::isAllLogsEnabled())) { Serial.print("[DEBUG] "); Serial.println(msg); }
 #define LOG_DEBUG_F(format, ...) if (!ConfigLoader::isSilentMode() && (ConfigLoader::isDebugLogsEnabled() || ConfigLoader::isAllLogsEnabled())) { Serial.printf("[DEBUG] " format "\n", ##__VA_ARGS__); }

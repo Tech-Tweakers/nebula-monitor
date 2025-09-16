@@ -1,4 +1,5 @@
 #include "logger.h"
+#include "core/infrastructure/logger/logger.h"
 
 // This file provides the implementation for the logger system
 // The actual logging is done through macros defined in logger.h

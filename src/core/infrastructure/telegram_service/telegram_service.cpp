@@ -5,6 +5,7 @@
 #include "core/infrastructure/memory_manager/memory_manager.h"
 #include "core/infrastructure/ntp_service/ntp_service.h"
 #include <ArduinoJson.h>
+#include "core/infrastructure/logger/logger.h"
 
 TelegramService::TelegramService() : enabled(false), sendingMessage(false) {
   // Initialize alert array
@@ -32,7 +33,7 @@ bool TelegramService::initialize(const String& botToken, const String& chatId, b
   }
 
   if (botToken.length() == 0 || chatId.length() == 0) {
-    Serial.println("[TELEGRAM] ERROR: Bot token or chat ID not provided");
+    Serial_println("[TELEGRAM] ERROR: Bot token or chat ID not provided");
     return false;
   }
 
@@ -47,7 +48,7 @@ bool TelegramService::initialize(const String& botToken, const String& chatId, b
     }
   }
 
-  Serial.println("[TELEGRAM] Service initialized successfully");
+  Serial_println("[TELEGRAM] Service initialized successfully");
   return true;
 }
 
@@ -81,11 +82,11 @@ void TelegramService::sendAlert(int targetIndex, const String& targetName, Statu
     if (alerts[targetIndex]) {
       alerts[targetIndex]->markAlertSent();
     }
-    Serial.printf("[TELEGRAM] Alert sent for target %d (%s) - Thread: %s\n", 
+    Serial_printf("[TELEGRAM] Alert sent for target %d (%s) - Thread: %s\n", 
                   targetIndex, targetName.c_str(), 
                   isThreadActive[targetIndex] ? "Reply" : "New");
   } else {
-    Serial.printf("[TELEGRAM] Failed to send alert for target %d (%s)\n", targetIndex, targetName.c_str());
+    Serial_printf("[TELEGRAM] Failed to send alert for target %d (%s)\n", targetIndex, targetName.c_str());
   }
   
   sendingMessage = false;
@@ -113,9 +114,9 @@ void TelegramService::sendRecoveryAlert(int targetIndex, const String& targetNam
       // Reset alert data for clean state - ready for next alert
       alert->reset();
     }
-    Serial.printf("[TELEGRAM] Recovery alert sent for target %d (%s) - Thread ended\n", targetIndex, targetName.c_str());
+    Serial_printf("[TELEGRAM] Recovery alert sent for target %d (%s) - Thread ended\n", targetIndex, targetName.c_str());
   } else {
-    Serial.printf("[TELEGRAM] Failed to send recovery alert for target %d (%s)\n", targetIndex, targetName.c_str());
+    Serial_printf("[TELEGRAM] Failed to send recovery alert for target %d (%s)\n", targetIndex, targetName.c_str());
   }
   
   sendingMessage = false;
@@ -123,7 +124,7 @@ void TelegramService::sendRecoveryAlert(int targetIndex, const String& targetNam
 
 void TelegramService::sendTestMessage(const String* targetNames, int targetCount) {
   if (!enabled) {
-    Serial.println("[TELEGRAM] Service not active, skipping test message");
+    Serial_println("[TELEGRAM] Service not active, skipping test message");
     return;
   }
 
@@ -280,7 +281,7 @@ String TelegramService::formatTime(unsigned long seconds) const {
 String TelegramService::getCurrentTime() const {
   // Use NTP service for real time instead of uptime
   String timeStr = NTPService::getCurrentDateTime();
-  Serial.printf("[TELEGRAM] getCurrentTime: %s\n", timeStr.c_str());
+  Serial_printf("[TELEGRAM] getCurrentTime: %s\n", timeStr.c_str());
   return timeStr;
 }
 
@@ -368,13 +369,13 @@ bool TelegramService::sendMessage(const String& message, int targetIndex, bool i
   SSLLock sslLock(3000); // 3 second timeout
   
   if (!sslLock.isLocked()) {
-    Serial.println("[TELEGRAM] ERROR: Failed to acquire SSL lock!");
+    Serial_println("[TELEGRAM] ERROR: Failed to acquire SSL lock!");
     return false;
   }
 
   // Check available memory before proceeding
   if (MemoryManager::getInstance().isMemoryLow()) {
-    Serial.println("[TELEGRAM] WARNING: Low memory, skipping message");
+    Serial_println("[TELEGRAM] WARNING: Low memory, skipping message");
     return false;
   }
 
@@ -382,7 +383,7 @@ bool TelegramService::sendMessage(const String& message, int targetIndex, bool i
   String url = "https://api.telegram.org/bot" + botToken + "/sendMessage";
   
   if (!http.begin(url)) {
-    Serial.println("[TELEGRAM] ERROR: Failed to begin HTTP request");
+    Serial_println("[TELEGRAM] ERROR: Failed to begin HTTP request");
     return false;
   }
 
@@ -398,7 +399,7 @@ bool TelegramService::sendMessage(const String& message, int targetIndex, bool i
   // Add reply_to_message_id if we have an active thread for this target
   if (targetIndex >= 0 && targetIndex < 6 && isThreadActive[targetIndex] && lastMessageIds[targetIndex] > 0) {
     doc["reply_to_message_id"] = lastMessageIds[targetIndex];
-    Serial.printf("[TELEGRAM] Sending reply to message %d for target %d\n", lastMessageIds[targetIndex], targetIndex);
+    Serial_printf("[TELEGRAM] Sending reply to message %d for target %d\n", lastMessageIds[targetIndex], targetIndex);
   }
   
   String payload;
@@ -407,7 +408,7 @@ bool TelegramService::sendMessage(const String& message, int targetIndex, bool i
   // Clear document to free memory
   doc.clear();
   
-  Serial.printf("[TELEGRAM] Sending message (heap: %d bytes)\n", ESP.getFreeHeap());
+  Serial_printf("[TELEGRAM] Sending message (heap: %d bytes)\n", ESP.getFreeHeap());
   
   int httpResponseCode = http.POST(payload);
   http.end();
@@ -418,11 +419,11 @@ bool TelegramService::sendMessage(const String& message, int targetIndex, bool i
   
   if (httpResponseCode > 0) {
     if (httpResponseCode == 200) {
-      Serial.println("[TELEGRAM] Message sent successfully");
+      Serial_println("[TELEGRAM] Message sent successfully");
       
       // TODO: Parse response to get real message_id from Telegram
       // Temporarily disabled to prevent hanging
-      Serial.println("[TELEGRAM] Response parsing disabled to prevent hanging");
+      Serial_println("[TELEGRAM] Response parsing disabled to prevent hanging");
       uint32_t realMessageId = 0; // Will be implemented later
       
       // Update thread management for this target
@@ -431,25 +432,25 @@ bool TelegramService::sendMessage(const String& message, int targetIndex, bool i
           // Recovery ends the thread
           isThreadActive[targetIndex] = false;
           lastMessageIds[targetIndex] = 0;
-          Serial.printf("[TELEGRAM] Thread ended for target %d (recovery)\n", targetIndex);
+          Serial_printf("[TELEGRAM] Thread ended for target %d (recovery)\n", targetIndex);
         } else {
           // Down alert continues or starts thread
           if (realMessageId > 0) {
             lastMessageIds[targetIndex] = realMessageId;
             isThreadActive[targetIndex] = true;
-            Serial.printf("[TELEGRAM] Thread active for target %d (down) - message_id: %d\n", targetIndex, realMessageId);
+            Serial_printf("[TELEGRAM] Thread active for target %d (down) - message_id: %d\n", targetIndex, realMessageId);
           } else {
-            Serial.printf("[TELEGRAM] WARNING: Could not get message_id for target %d\n", targetIndex);
+            Serial_printf("[TELEGRAM] WARNING: Could not get message_id for target %d\n", targetIndex);
           }
         }
       }
       
       return true;
     } else {
-      Serial.printf("[TELEGRAM] HTTP error: %d\n", httpResponseCode);
+      Serial_printf("[TELEGRAM] HTTP error: %d\n", httpResponseCode);
     }
   } else {
-    Serial.printf("[TELEGRAM] ERROR: HTTP request failed, code: %d\n", httpResponseCode);
+    Serial_printf("[TELEGRAM] ERROR: HTTP request failed, code: %d\n", httpResponseCode);
   }
   
   return false;

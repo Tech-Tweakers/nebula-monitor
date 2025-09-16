@@ -1,5 +1,6 @@
 #include "ssl_mutex_manager.h"
 #include <Arduino.h>
+#include "core/infrastructure/logger/logger.h"
 
 // Static member definitions
 SemaphoreHandle_t SSLMutexManager::ssl_mutex = nullptr;
@@ -12,16 +13,16 @@ uint32_t SSLMutexManager::max_wait_time_ever_ms = 0;
 
 bool SSLMutexManager::initialize() {
   if (initialized) {
-    Serial.println("[SSL_MUTEX] Already initialized");
+    Serial_println("[SSL_MUTEX] Already initialized");
     return true;
   }
   
-  Serial.println("[SSL_MUTEX] Initializing SSL mutex manager...");
+  Serial_println("[SSL_MUTEX] Initializing SSL mutex manager...");
   
   // Create mutex
   ssl_mutex = xSemaphoreCreateMutex();
   if (!ssl_mutex) {
-    Serial.println("[SSL_MUTEX] ERROR: Failed to create SSL mutex!");
+    Serial_println("[SSL_MUTEX] ERROR: Failed to create SSL mutex!");
     return false;
   }
   
@@ -29,8 +30,8 @@ bool SSLMutexManager::initialize() {
   resetStatistics();
   
   initialized = true;
-  Serial.println("[SSL_MUTEX] SSL mutex manager initialized successfully!");
-  Serial.printf("[SSL_MUTEX] Max wait time: %d ms\n", max_wait_time_ms);
+  Serial_println("[SSL_MUTEX] SSL mutex manager initialized successfully!");
+  Serial_printf("[SSL_MUTEX] Max wait time: %d ms\n", max_wait_time_ms);
   
   return true;
 }
@@ -38,7 +39,7 @@ bool SSLMutexManager::initialize() {
 void SSLMutexManager::cleanup() {
   if (!initialized) return;
   
-  Serial.println("[SSL_MUTEX] Cleaning up SSL mutex manager...");
+  Serial_println("[SSL_MUTEX] Cleaning up SSL mutex manager...");
   
   // Wait for any pending locks to be released
   uint32_t wait_count = 0;
@@ -48,7 +49,7 @@ void SSLMutexManager::cleanup() {
   }
   
   if (lock_count > 0) {
-    Serial.printf("[SSL_MUTEX] WARNING: %d locks still active during cleanup!\n", lock_count);
+    Serial_printf("[SSL_MUTEX] WARNING: %d locks still active during cleanup!\n", lock_count);
   }
   
   // Delete mutex
@@ -60,12 +61,12 @@ void SSLMutexManager::cleanup() {
   initialized = false;
   lock_count = 0;
   
-  Serial.println("[SSL_MUTEX] SSL mutex manager cleaned up");
+  Serial_println("[SSL_MUTEX] SSL mutex manager cleaned up");
 }
 
 bool SSLMutexManager::lockSSL(uint32_t timeout_ms) {
   if (!initialized) {
-    Serial.println("[SSL_MUTEX] ERROR: Not initialized!");
+    Serial_println("[SSL_MUTEX] ERROR: Not initialized!");
     return false;
   }
   
@@ -78,7 +79,7 @@ bool SSLMutexManager::lockSSL(uint32_t timeout_ms) {
 
 void SSLMutexManager::unlockSSL() {
   if (!initialized) {
-    Serial.println("[SSL_MUTEX] ERROR: Not initialized!");
+    Serial_println("[SSL_MUTEX] ERROR: Not initialized!");
     return;
   }
   
@@ -87,7 +88,7 @@ void SSLMutexManager::unlockSSL() {
 
 bool SSLMutexManager::tryLockSSL() {
   if (!initialized) {
-    Serial.println("[SSL_MUTEX] ERROR: Not initialized!");
+    Serial_println("[SSL_MUTEX] ERROR: Not initialized!");
     return false;
   }
   
@@ -122,7 +123,7 @@ void SSLMutexManager::resetStatistics() {
 
 void SSLMutexManager::setMaxWaitTime(uint32_t max_wait_ms) {
   max_wait_time_ms = max_wait_ms;
-  Serial.printf("[SSL_MUTEX] Max wait time set to %d ms\n", max_wait_ms);
+  Serial_printf("[SSL_MUTEX] Max wait time set to %d ms\n", max_wait_ms);
 }
 
 bool SSLMutexManager::acquireLock(uint32_t timeout_ms) {
@@ -144,13 +145,13 @@ bool SSLMutexManager::acquireLock(uint32_t timeout_ms) {
       max_wait_time_ever_ms = wait_time;
     }
     
-    Serial.printf("[SSL_MUTEX] Lock acquired (wait: %d ms, count: %d)\n", 
+    Serial_printf("[SSL_MUTEX] Lock acquired (wait: %d ms, count: %d)\n", 
                   wait_time, lock_count);
     
     return true;
   } else {
     uint32_t wait_time = millis() - start_time;
-    Serial.printf("[SSL_MUTEX] Lock timeout after %d ms\n", wait_time);
+    Serial_printf("[SSL_MUTEX] Lock timeout after %d ms\n", wait_time);
     return false;
   }
 }
@@ -161,9 +162,9 @@ void SSLMutexManager::releaseLock() {
   if (lock_count > 0) {
     lock_count--;
     xSemaphoreGive(ssl_mutex);
-    Serial.printf("[SSL_MUTEX] Lock released (count: %d)\n", lock_count);
+    Serial_printf("[SSL_MUTEX] Lock released (count: %d)\n", lock_count);
   } else {
-    Serial.println("[SSL_MUTEX] WARNING: Attempted to release lock when count is 0!");
+    Serial_println("[SSL_MUTEX] WARNING: Attempted to release lock when count is 0!");
   }
 }
 
@@ -172,9 +173,9 @@ SSLLock::SSLLock(uint32_t timeout_ms) : locked(false), start_time(millis()) {
   locked = SSLMutexManager::lockSSL(timeout_ms);
   
   if (locked) {
-    Serial.printf("[SSL_LOCK] Auto-locked SSL (timeout: %d ms)\n", timeout_ms);
+    Serial_printf("[SSL_LOCK] Auto-locked SSL (timeout: %d ms)\n", timeout_ms);
   } else {
-    Serial.printf("[SSL_LOCK] Failed to lock SSL within %d ms\n", timeout_ms);
+    Serial_printf("[SSL_LOCK] Failed to lock SSL within %d ms\n", timeout_ms);
   }
 }
 
@@ -182,7 +183,7 @@ SSLLock::~SSLLock() {
   if (locked) {
     SSLMutexManager::unlockSSL();
     uint32_t hold_time = millis() - start_time;
-    Serial.printf("[SSL_LOCK] Auto-unlocked SSL (held for %d ms)\n", hold_time);
+    Serial_printf("[SSL_LOCK] Auto-unlocked SSL (held for %d ms)\n", hold_time);
   }
 }
 
@@ -191,7 +192,7 @@ void SSLLock::release() {
     SSLMutexManager::unlockSSL();
     locked = false;
     uint32_t hold_time = millis() - start_time;
-    Serial.printf("[SSL_LOCK] Manually released SSL (held for %d ms)\n", hold_time);
+    Serial_printf("[SSL_LOCK] Manually released SSL (held for %d ms)\n", hold_time);
   }
 }
 

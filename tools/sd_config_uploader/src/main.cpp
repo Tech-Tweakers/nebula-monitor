@@ -59,6 +59,7 @@ DEBUG_LOGS_ENABLED=false
 TOUCH_LOGS_ENABLED=false
 TELEGRAM_LOGS_ENABLED=false
 ALL_LOGS_ENABLED=false
+SILENT_MODE=true
 
 # ===========================================
 # Network Targets Configuration

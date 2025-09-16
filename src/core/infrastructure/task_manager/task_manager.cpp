@@ -3,6 +3,7 @@
 #include "ui/display_manager/display_manager.h"
 #include "core/infrastructure/memory_manager/memory_manager.h"
 #include <Arduino.h>
+#include "core/infrastructure/logger/logger.h"
 
 // Static member definitions
 TaskHandle_t TaskManager::display_task_handle = nullptr;
@@ -15,7 +16,7 @@ bool TaskManager::initialized = false;
 bool TaskManager::initialize() {
   if (initialized) return true;
   
-  Serial.println("[TASK_MANAGER] Initializing task manager...");
+  Serial_println("[TASK_MANAGER] Initializing task manager...");
   
   // Create event queue
   createEventQueue();
@@ -24,7 +25,7 @@ bool TaskManager::initialize() {
   createTasks();
   
   initialized = true;
-  Serial.println("[TASK_MANAGER] Task manager initialized successfully!");
+  Serial_println("[TASK_MANAGER] Task manager initialized successfully!");
   
   return true;
 }
@@ -42,24 +43,24 @@ void TaskManager::cleanup() {
   }
   
   initialized = false;
-  Serial.println("[TASK_MANAGER] Task manager cleaned up");
+  Serial_println("[TASK_MANAGER] Task manager cleaned up");
 }
 
 bool TaskManager::startTasks() {
   if (!initialized) {
-    Serial.println("[TASK_MANAGER] ERROR: Not initialized!");
+    Serial_println("[TASK_MANAGER] ERROR: Not initialized!");
     return false;
   }
   
   if (display_task_handle || scanner_task_handle) {
-    Serial.println("[TASK_MANAGER] Tasks already running!");
+    Serial_println("[TASK_MANAGER] Tasks already running!");
     return true;
   }
   
   // Create tasks
   createTasks();
   
-  Serial.println("[TASK_MANAGER] Tasks started successfully!");
+  Serial_println("[TASK_MANAGER] Tasks started successfully!");
   return true;
 }
 
@@ -74,7 +75,7 @@ void TaskManager::stopTasks() {
     scanner_task_handle = nullptr;
   }
   
-  Serial.println("[TASK_MANAGER] Tasks stopped");
+  Serial_println("[TASK_MANAGER] Tasks stopped");
 }
 
 void TaskManager::setDependencies(NetworkMonitor* nm, DisplayManager* dm) {
@@ -98,9 +99,9 @@ bool TaskManager::receiveEvent(ScanEvent& event, uint32_t timeout_ms) {
 void TaskManager::createEventQueue() {
   event_queue = xQueueCreate(20, sizeof(ScanEvent));
   if (!event_queue) {
-    Serial.println("[TASK_MANAGER] ERROR: Failed to create event queue!");
+    Serial_println("[TASK_MANAGER] ERROR: Failed to create event queue!");
   } else {
-    Serial.println("[TASK_MANAGER] Event queue created successfully");
+    Serial_println("[TASK_MANAGER] Event queue created successfully");
   }
 }
 
@@ -117,7 +118,7 @@ void TaskManager::createTasks() {
   );
   
   if (result != pdPASS) {
-    Serial.println("[TASK_MANAGER] ERROR: Failed to create display task!");
+    Serial_println("[TASK_MANAGER] ERROR: Failed to create display task!");
     return;
   }
   
@@ -133,15 +134,15 @@ void TaskManager::createTasks() {
   );
   
   if (result != pdPASS) {
-    Serial.println("[TASK_MANAGER] ERROR: Failed to create scanner task!");
+    Serial_println("[TASK_MANAGER] ERROR: Failed to create scanner task!");
     return;
   }
   
-  Serial.println("[TASK_MANAGER] Tasks created successfully!");
+  Serial_println("[TASK_MANAGER] Tasks created successfully!");
 }
 
 void TaskManager::displayTask(void* pv) {
-  Serial.println("[DISPLAY_TASK] Started on Core 1");
+  Serial_println("[DISPLAY_TASK] Started on Core 1");
   
   for (;;) {
     // Process events from queue
@@ -176,7 +177,7 @@ void TaskManager::displayTask(void* pv) {
 }
 
 void TaskManager::scannerTask(void* pv) {
-  Serial.println("[SCANNER_TASK] Started on Core 0");
+  Serial_println("[SCANNER_TASK] Started on Core 0");
   
   UBaseType_t stackHighWaterMark = 0;
   uint32_t lastStackCheck = 0;
@@ -188,10 +189,10 @@ void TaskManager::scannerTask(void* pv) {
     // Monitor stack usage every 30 seconds
     if (now - lastStackCheck > 30000) {
       stackHighWaterMark = uxTaskGetStackHighWaterMark(nullptr);
-      Serial.printf("[SCANNER_TASK] Stack high water mark: %d bytes\n", stackHighWaterMark * sizeof(StackType_t));
+      Serial_printf("[SCANNER_TASK] Stack high water mark: %d bytes\n", stackHighWaterMark * sizeof(StackType_t));
       
       if (stackHighWaterMark < 512) { // Less than 512 bytes remaining
-        Serial.println("[SCANNER_TASK] WARNING: Low stack space!");
+        Serial_println("[SCANNER_TASK] WARNING: Low stack space!");
       }
       
       lastStackCheck = now;
@@ -202,12 +203,12 @@ void TaskManager::scannerTask(void* pv) {
       // Only run GC if NOT scanning to avoid interrupting active scans
       if (MemoryManager::getInstance().isMemoryLow()) {
         if (networkMonitor && !networkMonitor->isScanning()) {
-          Serial.println("[SCANNER_TASK] Low memory detected, triggering GC (scan not active)");
+          Serial_println("[SCANNER_TASK] Low memory detected, triggering GC (scan not active)");
           MemoryManager::getInstance().forceGarbageCollection();
         } else if (networkMonitor && networkMonitor->isScanning()) {
-          Serial.println("[SCANNER_TASK] Low memory detected but scan active, deferring GC");
+          Serial_println("[SCANNER_TASK] Low memory detected but scan active, deferring GC");
         } else {
-          Serial.println("[SCANNER_TASK] Low memory detected, triggering GC");
+          Serial_println("[SCANNER_TASK] Low memory detected, triggering GC");
           MemoryManager::getInstance().forceGarbageCollection();
         }
       }
@@ -221,7 +222,7 @@ void TaskManager::scannerTask(void* pv) {
     if (networkMonitor) {
       // Check for stuck scans
       if (networkMonitor->isScanStuck()) {
-        Serial.println("[SCANNER_TASK] WARNING: Detected stuck scan, forcing stop");
+        Serial_println("[SCANNER_TASK] WARNING: Detected stuck scan, forcing stop");
         networkMonitor->forceStopScan();
       }
       
