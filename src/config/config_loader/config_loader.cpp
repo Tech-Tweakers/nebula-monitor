@@ -170,6 +170,11 @@ bool ConfigLoader::isAllLogsEnabled() {
   return value.equalsIgnoreCase("true");
 }
 
+bool ConfigLoader::isSilentMode() {
+  String value = getValue("SILENT_MODE", "false");
+  return value.equalsIgnoreCase("true");
+}
+
 // Network Targets
 int ConfigLoader::getTargetCount() {
   int count = 0;
