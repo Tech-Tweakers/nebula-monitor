@@ -18,6 +18,7 @@ public:
   // Initialization
   static bool load();
   static void cleanup();
+  static void initializeLoggerInterface();
   
   // WiFi Configuration
   static String getWifiSSID();

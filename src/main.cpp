@@ -55,12 +55,15 @@ void setup() {
   LOG_LEGACY("========================================");
   
   // 1. Load configuration
-  LOG_MAIN("Loading configuration...");
+  Serial.println("[MAIN] Loading configuration...");
   if (!ConfigLoader::load()) {
-    LOG_ERROR("Failed to load configuration!");
+    Serial.println("[ERROR] Failed to load configuration!");
     return;
   }
-  LOG_MAIN("Configuration loaded successfully!");
+  Serial.println("[MAIN] Configuration loaded successfully!");
+  
+  // 1.5. Initialize logger interface after ConfigLoader is loaded
+  ConfigLoader::initializeLoggerInterface();
   
   // 2. Initialize TFT display
   LOG_MAIN("Initializing TFT display...");
