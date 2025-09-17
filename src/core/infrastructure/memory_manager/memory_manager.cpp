@@ -1,6 +1,7 @@
 #include "memory_manager.h"
 #include <WiFi.h>
 #include <HTTPClient.h>
+#include "core/infrastructure/logger/logger.h"
 
 // Global instance
 MemoryManager& MemoryManager::getInstance() {
@@ -11,7 +12,7 @@ MemoryManager& MemoryManager::getInstance() {
 bool MemoryManager::initialize() {
   if (initialized) return true;
   
-  Serial.println("[MEMORY_MANAGER] Initializing memory manager...");
+  Serial_println("[MEMORY_MANAGER] Initializing memory manager...");
   
   // Initialize state
   initialized = true;
@@ -35,13 +36,13 @@ bool MemoryManager::initialize() {
   );
   
   if (result != pdPASS) {
-    Serial.println("[MEMORY_MANAGER] ERROR: Failed to create memory monitor task!");
+    Serial_println("[MEMORY_MANAGER] ERROR: Failed to create memory monitor task!");
     initialized = false;
     return false;
   }
   
-  Serial.println("[MEMORY_MANAGER] Memory manager initialized successfully!");
-  Serial.println("[MEMORY_MANAGER] WATCHDOG DISABLED - Full control to application");
+  Serial_println("[MEMORY_MANAGER] Memory manager initialized successfully!");
+  Serial_println("[MEMORY_MANAGER] WATCHDOG DISABLED - Full control to application");
   return true;
 }
 
@@ -63,14 +64,14 @@ MemoryManager::MemoryStats MemoryManager::getMemoryStats() {
 void MemoryManager::printMemoryStats() {
   MemoryStats stats = getMemoryStats();
   
-  Serial.println("\n=== MEMORY STATS ===");
-  Serial.printf("Free Heap: %lu bytes\n", stats.freeHeap);
-  Serial.printf("Min Free Heap: %lu bytes\n", stats.minFreeHeap);
-  Serial.printf("Max Allocated: %lu bytes\n", stats.maxAllocatedHeap);
-  Serial.printf("Free Stack: %lu bytes\n", stats.freeStack);
-  Serial.printf("Low Memory: %s\n", stats.lowMemory ? "YES" : "NO");
-  Serial.printf("Critical Memory: %s\n", stats.criticalMemory ? "YES" : "NO");
-  Serial.println("==================\n");
+  Serial_println("\n=== MEMORY STATS ===");
+  Serial_printf("Free Heap: %lu bytes\n", stats.freeHeap);
+  Serial_printf("Min Free Heap: %lu bytes\n", stats.minFreeHeap);
+  Serial_printf("Max Allocated: %lu bytes\n", stats.maxAllocatedHeap);
+  Serial_printf("Free Stack: %lu bytes\n", stats.freeStack);
+  Serial_printf("Low Memory: %s\n", stats.lowMemory ? "YES" : "NO");
+  Serial_printf("Critical Memory: %s\n", stats.criticalMemory ? "YES" : "NO");
+  Serial_println("==================\n");
 }
 
 bool MemoryManager::isMemoryLow() {
@@ -89,7 +90,7 @@ void MemoryManager::forceGarbageCollection() {
     return;
   }
   
-  Serial.println("[MEMORY_MANAGER] Running garbage collection...");
+  Serial_println("[MEMORY_MANAGER] Running garbage collection...");
   
   uint32_t beforeGC = ESP.getFreeHeap();
   
@@ -109,10 +110,10 @@ void MemoryManager::forceGarbageCollection() {
   
   // Check for underflow (afterGC can be higher than beforeGC due to fragmentation)
   if (afterGC >= beforeGC) {
-    Serial.printf("[MEMORY_MANAGER] GC completed: no memory freed (heap: %lu -> %lu)\n", beforeGC, afterGC);
+    Serial_printf("[MEMORY_MANAGER] GC completed: no memory freed (heap: %lu -> %lu)\n", beforeGC, afterGC);
   } else {
     uint32_t freed = beforeGC - afterGC;
-    Serial.printf("[MEMORY_MANAGER] GC completed: freed %lu bytes (heap: %lu -> %lu)\n", freed, beforeGC, afterGC);
+    Serial_printf("[MEMORY_MANAGER] GC completed: freed %lu bytes (heap: %lu -> %lu)\n", freed, beforeGC, afterGC);
   }
   lastGCCleanup = now;
 }
@@ -128,29 +129,29 @@ void MemoryManager::forceGarbageCollectionSafe() {
   // Check if we're in a critical operation (like scanning)
   // This is a safety check to avoid interrupting critical operations
   if (ESP.getFreeHeap() > CRITICAL_MEMORY_THRESHOLD) {
-    Serial.println("[MEMORY_MANAGER] Memory not critical, skipping GC for safety");
+    Serial_println("[MEMORY_MANAGER] Memory not critical, skipping GC for safety");
     return;
   }
   
-  Serial.println("[MEMORY_MANAGER] Running safe garbage collection...");
+  Serial_println("[MEMORY_MANAGER] Running safe garbage collection...");
   forceGarbageCollection();
 }
 
 void MemoryManager::cleanupStrings() {
   // Force cleanup of temporary strings
   // This is a best-effort approach since we can't force String cleanup
-  Serial.println("[MEMORY_MANAGER] Cleaning up strings...");
+  Serial_println("[MEMORY_MANAGER] Cleaning up strings...");
 }
 
 void MemoryManager::cleanupWiFiClients() {
   // WiFi clients are automatically cleaned up when they go out of scope
   // But we can force some cleanup
-  Serial.println("[MEMORY_MANAGER] Cleaning up WiFi clients...");
+  Serial_println("[MEMORY_MANAGER] Cleaning up WiFi clients...");
 }
 
 void MemoryManager::cleanupHTTPClients() {
   // HTTP clients cleanup
-  Serial.println("[MEMORY_MANAGER] Cleaning up HTTP clients...");
+  Serial_println("[MEMORY_MANAGER] Cleaning up HTTP clients...");
 }
 
 String* MemoryManager::createString(const String& value) {
@@ -176,28 +177,28 @@ void MemoryManager::feedWatchdog() {
 
 void MemoryManager::enableWatchdogFeeding() {
   watchdogFeedingEnabled = true;
-  Serial.println("[MEMORY_MANAGER] Watchdog feeding enabled");
+  Serial_println("[MEMORY_MANAGER] Watchdog feeding enabled");
 }
 
 void MemoryManager::disableWatchdogFeeding() {
   watchdogFeedingEnabled = false;
-  Serial.println("[MEMORY_MANAGER] Watchdog feeding disabled");
+  Serial_println("[MEMORY_MANAGER] Watchdog feeding disabled");
 }
 
 void MemoryManager::handleMemoryPressure() {
   MemoryStats stats = getMemoryStats();
   
   if (stats.criticalMemory) {
-    Serial.println("[MEMORY_MANAGER] CRITICAL MEMORY - Emergency cleanup!");
+    Serial_println("[MEMORY_MANAGER] CRITICAL MEMORY - Emergency cleanup!");
     emergencyCleanup();
   } else if (stats.lowMemory) {
-    Serial.println("[MEMORY_MANAGER] Low memory - Running cleanup...");
+    Serial_println("[MEMORY_MANAGER] Low memory - Running cleanup...");
     forceGarbageCollection();
   }
 }
 
 void MemoryManager::emergencyCleanup() {
-  Serial.println("[MEMORY_MANAGER] Emergency cleanup started!");
+  Serial_println("[MEMORY_MANAGER] Emergency cleanup started!");
   
   // Force all cleanup operations
   cleanupStrings();
@@ -211,7 +212,7 @@ void MemoryManager::emergencyCleanup() {
   // Print final memory stats
   printMemoryStats();
   
-  Serial.println("[MEMORY_MANAGER] Emergency cleanup completed!");
+  Serial_println("[MEMORY_MANAGER] Emergency cleanup completed!");
 }
 
 void MemoryManager::monitorTaskMemory() {
@@ -220,7 +221,7 @@ void MemoryManager::monitorTaskMemory() {
   uint32_t freeStack = stackHighWaterMark * sizeof(StackType_t);
   
   if (freeStack < 1024) { // Less than 1KB remaining
-    Serial.printf("[MEMORY_MANAGER] WARNING: Low stack space: %lu bytes\n", freeStack);
+    Serial_printf("[MEMORY_MANAGER] WARNING: Low stack space: %lu bytes\n", freeStack);
   }
 }
 
@@ -275,7 +276,7 @@ void MemoryManager::deallocateString(String* str) {
 void MemoryManager::memoryMonitorTask(void* parameter) {
   MemoryManager* manager = static_cast<MemoryManager*>(parameter);
   
-  Serial.println("[MEMORY_MONITOR] Memory monitoring task started");
+  Serial_println("[MEMORY_MONITOR] Memory monitoring task started");
   
   for (;;) {
     uint32_t now = millis();
@@ -331,16 +332,16 @@ const String* ManagedString::operator->() const {
 
 // MemoryPressureHandler implementation
 void MemoryPressureHandler::handleLowMemory() {
-  Serial.println("[MEMORY_PRESSURE] Handling low memory condition");
+  Serial_println("[MEMORY_PRESSURE] Handling low memory condition");
   MemoryManager::getInstance().forceGarbageCollection();
 }
 
 void MemoryPressureHandler::handleCriticalMemory() {
-  Serial.println("[MEMORY_PRESSURE] Handling critical memory condition");
+  Serial_println("[MEMORY_PRESSURE] Handling critical memory condition");
   MemoryManager::getInstance().emergencyCleanup();
 }
 
 void MemoryPressureHandler::emergencyCleanup() {
-  Serial.println("[MEMORY_PRESSURE] Emergency cleanup triggered");
+  Serial_println("[MEMORY_PRESSURE] Emergency cleanup triggered");
   MemoryManager::getInstance().emergencyCleanup();
 }

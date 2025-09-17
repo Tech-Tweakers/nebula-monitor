@@ -1,6 +1,7 @@
 #include "ui/led_controller/led_controller.h"
 #include "config/config_loader/config_loader.h"
 #include <WiFi.h>
+#include "core/infrastructure/logger/logger.h"
 
 // Static member definitions
 int LEDController::LED_PIN_R = 16;
@@ -23,7 +24,7 @@ bool LEDController::blink_state = false;
 bool LEDController::initialize() {
   if (initialized) return true;
   
-  Serial.println("[LED] Initializing LED controller...");
+  Serial_println("[LED] Initializing LED controller...");
   
   // Load configuration
   LED_PIN_R = ConfigLoader::getLedPinR();
@@ -43,7 +44,7 @@ bool LEDController::initialize() {
   setAllOff();
   
   initialized = true;
-  Serial.println("[LED] LED controller initialized successfully!");
+  Serial_println("[LED] LED controller initialized successfully!");
   
   return true;
 }
@@ -128,7 +129,7 @@ void LEDController::setupPWM() {
   ledcAttachPin(LED_PIN_G, LEDC_CHANNEL_G);
   ledcAttachPin(LED_PIN_B, LEDC_CHANNEL_B);
   
-  Serial.printf("[LED] PWM setup: R=%d, G=%d, B=%d, Freq=%dHz, Res=%d bits\n", 
+  Serial_printf("[LED] PWM setup: R=%d, G=%d, B=%d, Freq=%dHz, Res=%d bits\n", 
                LED_PIN_R, LED_PIN_G, LED_PIN_B, LEDC_FREQ, LEDC_RES_BITS);
 }
 

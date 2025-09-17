@@ -1,4 +1,5 @@
 #include "config/config_loader/config_loader.h"
+#include "core/infrastructure/logger/logger.h"
 
 // Static member definitions
 bool ConfigLoader::initialized = false;
@@ -9,28 +10,28 @@ int ConfigLoader::configCount = 0;
 bool ConfigLoader::load() {
   if (initialized) return true;
   
-  Serial.println("[CONFIG] Loading configuration...");
+  LOG_CONFIG("Loading configuration...");
   
   // Initialize SPIFFS
   if (!SPIFFS.begin(true)) {
-    Serial.println("[CONFIG] ERROR: Failed to initialize SPIFFS!");
+    LOG_ERROR("Failed to initialize SPIFFS!");
     return false;
   }
   
   // Initialize SDCard Manager and sync config
-  Serial.println("[CONFIG] Checking for SDCard configuration sync...");
+  LOG_CONFIG("Checking for SDCard configuration sync...");
   SDCardManager::getInstance().initialize();
   
   // Check if config file exists
   if (!SPIFFS.exists("/config.env")) {
-    Serial.println("[CONFIG] ERROR: config.env file not found!");
+    LOG_ERROR("config.env file not found!");
     return false;
   }
   
   // Read config file
   File file = SPIFFS.open("/config.env", "r");
   if (!file) {
-    Serial.println("[CONFIG] ERROR: Failed to open config.env!");
+    LOG_ERROR("Failed to open config.env!");
     return false;
   }
   
@@ -57,7 +58,7 @@ bool ConfigLoader::load() {
   file.close();
   initialized = true;
   
-  Serial.printf("[CONFIG] Configuration loaded successfully! (%d settings)\n", configCount);
+  LOG_CONFIG_F("Configuration loaded successfully! (%d settings)", configCount);
   return true;
 }
 
@@ -73,7 +74,7 @@ void ConfigLoader::cleanup() {
     
     configCount = 0;
     initialized = false;
-    Serial.println("[CONFIG] Configuration cleaned up");
+    LOG_CONFIG("Configuration cleaned up");
   }
 }
 
@@ -100,7 +101,7 @@ void ConfigLoader::parseConfigLine(const String& line) {
   configValues[configCount] = String(valueCopy);
   configCount++;
   
-  Serial.printf("[CONFIG] %s = %s\n", keyCopy, valueCopy);
+  LOG_CONFIG_F("%s = %s", keyCopy, valueCopy);
 }
 
 String ConfigLoader::getValue(const char* key, const String& defaultValue) {
@@ -154,9 +155,23 @@ bool ConfigLoader::isDebugLogsEnabled() {
   return value.equalsIgnoreCase("true");
 }
 
+bool ConfigLoader::isTouchLogsEnabled() {
+  String value = getValue("TOUCH_LOGS_ENABLED", "false");
+  return value.equalsIgnoreCase("true");
+}
+
+bool ConfigLoader::isTelegramLogsEnabled() {
+  String value = getValue("TELEGRAM_LOGS_ENABLED", "false");
+  return value.equalsIgnoreCase("true");
+}
 
 bool ConfigLoader::isAllLogsEnabled() {
   String value = getValue("ALL_LOGS_ENABLED", "true");
+  return value.equalsIgnoreCase("true");
+}
+
+bool ConfigLoader::isSilentMode() {
+  String value = getValue("SILENT_MODE", "false");
   return value.equalsIgnoreCase("true");
 }
 
@@ -350,11 +365,11 @@ bool ConfigLoader::isHealthCheckStrictMode() {
 }
 
 void ConfigLoader::printAllConfigs() {
-  Serial.println("[CONFIG] === All Configuration Settings ===");
+  LOG_LEGACY("=== All Configuration Settings ===");
   for (int i = 0; i < configCount; i++) {
     if (configKeys[i] != nullptr) {
-      Serial.printf("[CONFIG] %s = %s\n", configKeys[i], configValues[i].c_str());
+      LOG_LEGACY_F("%s = %s", configKeys[i], configValues[i].c_str());
     }
   }
-  Serial.println("[CONFIG] ===================================");
+  LOG_LEGACY("===================================");
 }

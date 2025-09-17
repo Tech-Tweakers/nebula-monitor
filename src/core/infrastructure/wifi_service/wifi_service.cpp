@@ -1,4 +1,5 @@
 #include "wifi_service.h"
+#include "core/infrastructure/logger/logger.h"
 
 WiFiService::WiFiService() : connected(false), lastReconnectAttempt(0) {
 }
@@ -7,13 +8,13 @@ bool WiFiService::initialize(const String& ssid, const String& password) {
   this->ssid = ssid;
   this->password = password;
   
-  Serial.println("[WIFI] Initializing WiFi service...");
+  Serial_println("[WIFI] Initializing WiFi service...");
   
   WiFi.mode(WIFI_STA);
   
   // Configure DNS servers before connecting
   WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE, IPAddress(8, 8, 8, 8), IPAddress(8, 8, 4, 4));
-  Serial.println("[WIFI] DNS configured: 8.8.8.8, 8.8.4.4");
+  Serial_println("[WIFI] DNS configured: 8.8.8.8, 8.8.4.4");
   
   WiFi.begin(ssid.c_str(), password.c_str());
   
@@ -21,21 +22,21 @@ bool WiFiService::initialize(const String& ssid, const String& password) {
   unsigned long startTime = millis();
   while (WiFi.status() != WL_CONNECTED && (millis() - startTime) < 10000) {
     delay(500);
-    Serial.print(".");
+    Serial_print(".");
   }
   
   updateConnectionStatus();
   
   if (connected) {
-    Serial.println("\n[WIFI] Connected successfully!");
+    Serial_println("\n[WIFI] Connected successfully!");
     
     // Try to set DNS after connection (some routers override DNS)
     WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE, IPAddress(8, 8, 8, 8), IPAddress(8, 8, 4, 4));
-    Serial.println("[WIFI] DNS reconfigured after connection");
+    Serial_println("[WIFI] DNS reconfigured after connection");
     
     printInfo();
   } else {
-    Serial.println("\n[WIFI] Initial connection failed, will retry...");
+    Serial_println("\n[WIFI] Initial connection failed, will retry...");
   }
   
   return true; // Always return true, connection will be retried
@@ -46,7 +47,7 @@ void WiFiService::update() {
   
   // Auto-reconnect if disconnected
   if (!connected && (millis() - lastReconnectAttempt) > RECONNECT_INTERVAL) {
-    Serial.println("[WIFI] Attempting to reconnect...");
+    Serial_println("[WIFI] Attempting to reconnect...");
     reconnect();
     lastReconnectAttempt = millis();
   }
@@ -54,7 +55,7 @@ void WiFiService::update() {
 
 bool WiFiService::connect() {
   if (ssid.length() == 0 || password.length() == 0) {
-    Serial.println("[WIFI] ERROR: SSID or password not set!");
+    Serial_println("[WIFI] ERROR: SSID or password not set!");
     return false;
   }
   
@@ -75,7 +76,7 @@ bool WiFiService::connect() {
 bool WiFiService::reconnect() {
   if (connected) return true;
   
-  Serial.println("[WIFI] Reconnecting...");
+  Serial_println("[WIFI] Reconnecting...");
   WiFi.disconnect();
   delay(100);
   return connect();
@@ -84,7 +85,7 @@ bool WiFiService::reconnect() {
 void WiFiService::disconnect() {
   WiFi.disconnect();
   connected = false;
-  Serial.println("[WIFI] Disconnected");
+  Serial_println("[WIFI] Disconnected");
 }
 
 void WiFiService::updateConnectionStatus() {
@@ -92,10 +93,10 @@ void WiFiService::updateConnectionStatus() {
   connected = (WiFi.status() == WL_CONNECTED);
   
   if (connected && !wasConnected) {
-    Serial.println("[WIFI] Connected!");
+    Serial_println("[WIFI] Connected!");
     printInfo();
   } else if (!connected && wasConnected) {
-    Serial.println("[WIFI] Disconnected!");
+    Serial_println("[WIFI] Disconnected!");
   }
 }
 
@@ -121,11 +122,11 @@ int WiFiService::getRSSI() const {
 
 void WiFiService::printInfo() const {
   if (!connected) {
-    Serial.println("[WIFI] Not connected");
+    Serial_println("[WIFI] Not connected");
     return;
   }
   
-  Serial.printf("[WIFI] IP=%s  GW=%s  MASK=%s  DNS0=%s  RSSI=%d dBm\n",
+  Serial_printf("[WIFI] IP=%s  GW=%s  MASK=%s  DNS0=%s  RSSI=%d dBm\n",
     getLocalIP().c_str(),
     getGatewayIP().c_str(),
     getSubnetMask().c_str(),
@@ -133,5 +134,5 @@ void WiFiService::printInfo() const {
     getRSSI());
   
   // Show configured DNS vs actual DNS
-  Serial.printf("[WIFI] Configured DNS: 8.8.8.8, 8.8.4.4 | Actual DNS: %s\n", getDNSIP().c_str());
+  Serial_printf("[WIFI] Configured DNS: 8.8.8.8, 8.8.4.4 | Actual DNS: %s\n", getDNSIP().c_str());
 }

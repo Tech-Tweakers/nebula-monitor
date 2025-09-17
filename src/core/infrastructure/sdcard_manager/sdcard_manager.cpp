@@ -1,4 +1,5 @@
 #include "sdcard_manager.h"
+#include "core/infrastructure/logger/logger.h"
 
 // Static member definitions
 const char* SDCardManager::CONFIG_FILENAME = "/config.env";
@@ -13,7 +14,7 @@ SDCardManager& SDCardManager::getInstance() {
 bool SDCardManager::initialize() {
   if (initialized) return true;
   
-  Serial.println("[SDCARD] Initializing SDCard manager...");
+  Serial_println("[SDCARD] Initializing SDCard manager...");
   
   // Get SD CS pin from build flags
   #ifdef SD_CS
@@ -22,16 +23,16 @@ bool SDCardManager::initialize() {
     sdCsPin = DEFAULT_SD_CS_PIN;
   #endif
   
-  Serial.printf("[SDCARD] Using SD CS pin: %d\n", sdCsPin);
+  Serial_printf("[SDCARD] Using SD CS pin: %d\n", sdCsPin);
   
   // Initialize SD Card
   if (!SD.begin(sdCsPin)) {
-    Serial.println("[SDCARD] WARNING: SD Card not available");
-    Serial.println("[SDCARD] System will use SPIFFS only");
+    Serial_println("[SDCARD] WARNING: SD Card not available");
+    Serial_println("[SDCARD] System will use SPIFFS only");
     return false;
   }
   
-  Serial.println("[SDCARD] SD Card initialized successfully!");
+  Serial_println("[SDCARD] SD Card initialized successfully!");
   initialized = true;
   
   // Try to sync configuration
@@ -49,35 +50,35 @@ bool SDCardManager::isSDCardAvailable() {
 
 bool SDCardManager::syncConfigFromSD() {
   if (!isSDCardAvailable()) {
-    Serial.println("[SDCARD] SD Card not available for sync");
+    Serial_println("[SDCARD] SD Card not available for sync");
     return false;
   }
   
   // Check if config exists on SD
   if (!SD.exists(CONFIG_FILENAME)) {
-    Serial.println("[SDCARD] No config.env found on SD Card");
+    Serial_println("[SDCARD] No config.env found on SD Card");
     return false;
   }
   
   // Check if SD config is newer
   if (!isSDConfigNewer()) {
-    Serial.println("[SDCARD] SD config is not newer, skipping sync");
+    Serial_println("[SDCARD] SD config is not newer, skipping sync");
     return false;
   }
   
-  Serial.println("[SDCARD] SD config is newer, syncing to SPIFFS...");
+  Serial_println("[SDCARD] SD config is newer, syncing to SPIFFS...");
   
   // Open SD file
   File sdFile = SD.open(CONFIG_FILENAME, FILE_READ);
   if (!sdFile) {
-    Serial.println("[SDCARD] ERROR: Failed to open SD config file");
+    Serial_println("[SDCARD] ERROR: Failed to open SD config file");
     return false;
   }
   
   // Open SPIFFS file for writing
   File spiffsFile = SPIFFS.open(CONFIG_FILENAME, FILE_WRITE);
   if (!spiffsFile) {
-    Serial.println("[SDCARD] ERROR: Failed to open SPIFFS config file for writing");
+    Serial_println("[SDCARD] ERROR: Failed to open SPIFFS config file for writing");
     sdFile.close();
     return false;
   }
@@ -90,11 +91,11 @@ bool SDCardManager::syncConfigFromSD() {
   spiffsFile.close();
   
   if (success) {
-    Serial.println("[SDCARD] SUCCESS: Config synced from SD to SPIFFS!");
-    Serial.println("[SDCARD] New configuration loaded successfully!");
-    Serial.println("[SDCARD] No restart needed - config will be loaded on next scan cycle");
+    Serial_println("[SDCARD] SUCCESS: Config synced from SD to SPIFFS!");
+    Serial_println("[SDCARD] New configuration loaded successfully!");
+    Serial_println("[SDCARD] No restart needed - config will be loaded on next scan cycle");
   } else {
-    Serial.println("[SDCARD] ERROR: Failed to sync config from SD");
+    Serial_println("[SDCARD] ERROR: Failed to sync config from SD");
   }
   
   return success;
@@ -102,29 +103,29 @@ bool SDCardManager::syncConfigFromSD() {
 
 bool SDCardManager::syncConfigToSD() {
   if (!isSDCardAvailable()) {
-    Serial.println("[SDCARD] SD Card not available for sync");
+    Serial_println("[SDCARD] SD Card not available for sync");
     return false;
   }
   
   // Check if config exists on SPIFFS
   if (!SPIFFS.exists(CONFIG_FILENAME)) {
-    Serial.println("[SDCARD] No config.env found on SPIFFS");
+    Serial_println("[SDCARD] No config.env found on SPIFFS");
     return false;
   }
   
-  Serial.println("[SDCARD] Syncing config from SPIFFS to SD...");
+  Serial_println("[SDCARD] Syncing config from SPIFFS to SD...");
   
   // Open SPIFFS file
   File spiffsFile = SPIFFS.open(CONFIG_FILENAME, FILE_READ);
   if (!spiffsFile) {
-    Serial.println("[SDCARD] ERROR: Failed to open SPIFFS config file");
+    Serial_println("[SDCARD] ERROR: Failed to open SPIFFS config file");
     return false;
   }
   
   // Open SD file for writing
   File sdFile = SD.open(CONFIG_FILENAME, FILE_WRITE);
   if (!sdFile) {
-    Serial.println("[SDCARD] ERROR: Failed to open SD config file for writing");
+    Serial_println("[SDCARD] ERROR: Failed to open SD config file for writing");
     spiffsFile.close();
     return false;
   }
@@ -137,9 +138,9 @@ bool SDCardManager::syncConfigToSD() {
   sdFile.close();
   
   if (success) {
-    Serial.println("[SDCARD] SUCCESS: Config synced from SPIFFS to SD!");
+    Serial_println("[SDCARD] SUCCESS: Config synced from SPIFFS to SD!");
   } else {
-    Serial.println("[SDCARD] ERROR: Failed to sync config to SD");
+    Serial_println("[SDCARD] ERROR: Failed to sync config to SD");
   }
   
   return success;
@@ -147,21 +148,21 @@ bool SDCardManager::syncConfigToSD() {
 
 bool SDCardManager::isSDConfigNewer() {
   if (!isSDCardAvailable() || !SD.exists(CONFIG_FILENAME)) {
-    Serial.println("[SDCARD] DEBUG: SD not available or config not found");
+    Serial_println("[SDCARD] DEBUG: SD not available or config not found");
     return false;
   }
   
   // Open SD file
   File sdFile = SD.open(CONFIG_FILENAME, FILE_READ);
   if (!sdFile) {
-    Serial.println("[SDCARD] DEBUG: Failed to open SD file");
+    Serial_println("[SDCARD] DEBUG: Failed to open SD file");
     return false;
   }
   
   // Open SPIFFS file
   File spiffsFile = SPIFFS.open(CONFIG_FILENAME, FILE_READ);
   if (!spiffsFile) {
-    Serial.println("[SDCARD] DEBUG: SPIFFS file not found, SD is newer");
+    Serial_println("[SDCARD] DEBUG: SPIFFS file not found, SD is newer");
     sdFile.close();
     return true; // SD exists but SPIFFS doesn't
   }
@@ -170,23 +171,23 @@ bool SDCardManager::isSDConfigNewer() {
   size_t sdSize = sdFile.size();
   size_t spiffsSize = spiffsFile.size();
   
-  Serial.printf("[SDCARD] DEBUG: File sizes - SD=%d, SPIFFS=%d\n", sdSize, spiffsSize);
+  Serial_printf("[SDCARD] DEBUG: File sizes - SD=%d, SPIFFS=%d\n", sdSize, spiffsSize);
   
   sdFile.close();
   spiffsFile.close();
   
   // If sizes are different, assume SD is newer if it's larger
   if (sdSize != spiffsSize) {
-    Serial.printf("[SDCARD] Size difference: SD=%d, SPIFFS=%d\n", sdSize, spiffsSize);
+    Serial_printf("[SDCARD] Size difference: SD=%d, SPIFFS=%d\n", sdSize, spiffsSize);
     bool isNewer = sdSize > spiffsSize;
-    Serial.printf("[SDCARD] DEBUG: SD is %s based on size\n", isNewer ? "newer" : "older");
+    Serial_printf("[SDCARD] DEBUG: SD is %s based on size\n", isNewer ? "newer" : "older");
     return isNewer;
   }
   
   // If sizes are the same, compare content hash
-  Serial.println("[SDCARD] DEBUG: Same size, comparing content...");
+  Serial_println("[SDCARD] DEBUG: Same size, comparing content...");
   bool isNewer = compareFileContent();
-  Serial.printf("[SDCARD] DEBUG: SD is %s based on content\n", isNewer ? "newer" : "older");
+  Serial_printf("[SDCARD] DEBUG: SD is %s based on content\n", isNewer ? "newer" : "older");
   return isNewer;
 }
 
@@ -196,7 +197,7 @@ bool SDCardManager::compareFileContent() {
   File spiffsFile = SPIFFS.open(CONFIG_FILENAME, FILE_READ);
   
   if (!sdFile || !spiffsFile) {
-    Serial.println("[SDCARD] DEBUG: Failed to open files for content comparison");
+    Serial_println("[SDCARD] DEBUG: Failed to open files for content comparison");
     if (sdFile) sdFile.close();
     if (spiffsFile) spiffsFile.close();
     return false;
@@ -212,14 +213,14 @@ bool SDCardManager::compareFileContent() {
     size_t spiffsBytes = spiffsFile.read(spiffsBuffer, sizeof(spiffsBuffer));
     
     if (sdBytes != spiffsBytes) {
-      Serial.printf("[SDCARD] DEBUG: Different read sizes: SD=%d, SPIFFS=%d\n", sdBytes, spiffsBytes);
+      Serial_printf("[SDCARD] DEBUG: Different read sizes: SD=%d, SPIFFS=%d\n", sdBytes, spiffsBytes);
       sdFile.close();
       spiffsFile.close();
       return true; // Different sizes, assume SD is newer
     }
     
     if (memcmp(sdBuffer, spiffsBuffer, sdBytes) != 0) {
-      Serial.printf("[SDCARD] DEBUG: Content differs at byte %d\n", bytesCompared);
+      Serial_printf("[SDCARD] DEBUG: Content differs at byte %d\n", bytesCompared);
       sdFile.close();
       spiffsFile.close();
       return true; // Different content, assume SD is newer
@@ -232,7 +233,7 @@ bool SDCardManager::compareFileContent() {
   bool sdHasMore = sdFile.available() > 0;
   bool spiffsHasMore = spiffsFile.available() > 0;
   
-  Serial.printf("[SDCARD] DEBUG: Compared %d bytes, SD has more: %s, SPIFFS has more: %s\n", 
+  Serial_printf("[SDCARD] DEBUG: Compared %d bytes, SD has more: %s, SPIFFS has more: %s\n", 
                 bytesCompared, sdHasMore ? "yes" : "no", spiffsHasMore ? "yes" : "no");
   
   sdFile.close();
@@ -241,11 +242,11 @@ bool SDCardManager::compareFileContent() {
   // If SD has more data, it's newer
   bool isNewer = sdHasMore && !spiffsHasMore;
   if (isNewer) {
-    Serial.println("[SDCARD] DEBUG: SD has more data, considering newer");
+    Serial_println("[SDCARD] DEBUG: SD has more data, considering newer");
   } else if (!sdHasMore && !spiffsHasMore) {
-    Serial.println("[SDCARD] DEBUG: Files are identical");
+    Serial_println("[SDCARD] DEBUG: Files are identical");
   } else {
-    Serial.println("[SDCARD] DEBUG: SPIFFS has more data, considering older");
+    Serial_println("[SDCARD] DEBUG: SPIFFS has more data, considering older");
   }
   
   return isNewer;
@@ -277,7 +278,7 @@ bool SDCardManager::copyFile(File& source, File& destination) {
     
     size_t bytesToWrite = destination.write(buffer, bytesToRead);
     if (bytesToWrite != bytesToRead) {
-      Serial.println("[SDCARD] ERROR: Write mismatch during copy");
+      Serial_println("[SDCARD] ERROR: Write mismatch during copy");
       return false;
     }
     
@@ -285,13 +286,13 @@ bool SDCardManager::copyFile(File& source, File& destination) {
     bytesWritten += bytesToWrite;
   }
   
-  Serial.printf("[SDCARD] Copied %d bytes from source to destination\n", bytesWritten);
+  Serial_printf("[SDCARD] Copied %d bytes from source to destination\n", bytesWritten);
   return bytesWritten > 0;
 }
 
 void SDCardManager::cleanup() {
   if (initialized) {
     initialized = false;
-    Serial.println("[SDCARD] SDCard manager cleaned up");
+    Serial_println("[SDCARD] SDCard manager cleaned up");
   }
 }

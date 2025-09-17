@@ -1,5 +1,6 @@
 #include "core/infrastructure/ntp_service/ntp_service.h"
 #include <WiFi.h>
+#include "core/infrastructure/logger/logger.h"
 
 // Static member definitions
 WiFiUDP* NTPService::ntpUDP = nullptr;
@@ -10,11 +11,11 @@ unsigned long NTPService::lastSync = 0;
 bool NTPService::initialize() {
   if (initialized) return true;
   
-  Serial.println("[NTP] Initializing NTP service...");
+  Serial_println("[NTP] Initializing NTP service...");
   
   // Check WiFi connection
   if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("[NTP] ERROR: WiFi not connected!");
+    Serial_println("[NTP] ERROR: WiFi not connected!");
     return false;
   }
   
@@ -23,7 +24,7 @@ bool NTPService::initialize() {
   
   // Validate gateway IP before using it
   if (gatewayIP == "0.0.0.0" || gatewayIP.length() == 0) {
-    Serial.println("[NTP] WARNING: Gateway IP not available, using external servers only");
+    Serial_println("[NTP] WARNING: Gateway IP not available, using external servers only");
     gatewayIP = "192.168.1.1"; // Fallback to common gateway IP
   }
   
@@ -37,9 +38,9 @@ bool NTPService::initialize() {
   
   for (int serverIndex = 0; serverIndex < 5; serverIndex++) {
     if (serverIndex == 0) {
-      Serial.printf("[NTP] Trying server %d: %s (Local Modem SNTP)\n", serverIndex + 1, ntpServers[serverIndex]);
+      Serial_printf("[NTP] Trying server %d: %s (Local Modem SNTP)\n", serverIndex + 1, ntpServers[serverIndex]);
     } else {
-      Serial.printf("[NTP] Trying server %d: %s\n", serverIndex + 1, ntpServers[serverIndex]);
+      Serial_printf("[NTP] Trying server %d: %s\n", serverIndex + 1, ntpServers[serverIndex]);
     }
     
     // Setup NTP client with current server
@@ -48,26 +49,26 @@ bool NTPService::initialize() {
     // Try multiple times to sync time
     int attempts = 0;
     while (attempts < 2) { // Reduced attempts per server
-      Serial.printf("[NTP] Attempting sync with %s (attempt %d/2)...\n", ntpServers[serverIndex], attempts + 1);
+      Serial_printf("[NTP] Attempting sync with %s (attempt %d/2)...\n", ntpServers[serverIndex], attempts + 1);
       
       if (syncTime()) {
         initialized = true;
         lastSync = millis();
-        Serial.printf("[NTP] ✅ Service initialized successfully with %s!\n", ntpServers[serverIndex]);
+        Serial_printf("[NTP] ✅ Service initialized successfully with %s!\n", ntpServers[serverIndex]);
         return true;
       }
       attempts++;
-      Serial.printf("[NTP] ❌ Sync attempt %d failed with %s\n", attempts, ntpServers[serverIndex]);
+      Serial_printf("[NTP] ❌ Sync attempt %d failed with %s\n", attempts, ntpServers[serverIndex]);
       if (attempts < 2) {
         delay(1000); // Shorter delay
       }
     }
     
-    Serial.printf("[NTP] ⚠️ Server %s failed after 2 attempts, trying next...\n", ntpServers[serverIndex]);
+    Serial_printf("[NTP] ⚠️ Server %s failed after 2 attempts, trying next...\n", ntpServers[serverIndex]);
     delay(500); // Brief delay before next server
   }
   
-  Serial.println("[NTP] ERROR: Failed to sync time with all servers!");
+  Serial_println("[NTP] ERROR: Failed to sync time with all servers!");
   return false;
 }
 
@@ -88,11 +89,11 @@ void NTPService::cleanup() {
 
 bool NTPService::syncTime() {
   if (!timeClient) {
-    Serial.println("[NTP] ERROR: No NTP client available!");
+    Serial_println("[NTP] ERROR: No NTP client available!");
     return false;
   }
   
-  Serial.println("[NTP] Syncing time...");
+  Serial_println("[NTP] Syncing time...");
   
   // Add timeout and retry logic
   unsigned long startTime = millis();
@@ -100,16 +101,16 @@ bool NTPService::syncTime() {
   
   // Try up to 3 times with shorter timeouts
   for (int attempt = 0; attempt < 3; attempt++) {
-    Serial.printf("[NTP] Sync attempt %d/3...\n", attempt + 1);
+    Serial_printf("[NTP] Sync attempt %d/3...\n", attempt + 1);
     
     if (timeClient->update()) {
       lastSync = millis();
       unsigned long syncTime = millis() - startTime;
-      Serial.printf("[NTP] Time synced in %lums: %s\n", syncTime, getFormattedTime().c_str());
+      Serial_printf("[NTP] Time synced in %lums: %s\n", syncTime, getFormattedTime().c_str());
       success = true;
       break;
     } else {
-      Serial.printf("[NTP] Sync attempt %d failed\n", attempt + 1);
+      Serial_printf("[NTP] Sync attempt %d failed\n", attempt + 1);
       if (attempt < 2) {
         delay(1000); // Wait 1 second before retry
       }
@@ -117,12 +118,12 @@ bool NTPService::syncTime() {
   }
   
   if (!success) {
-    Serial.println("[NTP] ERROR: All sync attempts failed!");
-    Serial.println("[NTP] Possible causes:");
-    Serial.println("[NTP] - Modem/router blocking UDP port 123");
-    Serial.println("[NTP] - Firewall blocking NTP traffic");
-    Serial.println("[NTP] - ISP blocking NTP servers");
-    Serial.println("[NTP] - Network connectivity issues");
+    Serial_println("[NTP] ERROR: All sync attempts failed!");
+    Serial_println("[NTP] Possible causes:");
+    Serial_println("[NTP] - Modem/router blocking UDP port 123");
+    Serial_println("[NTP] - Firewall blocking NTP traffic");
+    Serial_println("[NTP] - ISP blocking NTP servers");
+    Serial_println("[NTP] - Network connectivity issues");
   }
   
   return success;
@@ -144,7 +145,7 @@ bool NTPService::syncTimeIfNeeded() {
   if (!timeClient->isTimeSet() || timeClient->getEpochTime() < 1600000000) {
     // Only sync if minimum interval has passed to avoid spam
     if (now - lastSync > MIN_SYNC_INTERVAL_MS) {
-      Serial.println("[NTP] Time seems invalid, attempting sync...");
+      Serial_println("[NTP] Time seems invalid, attempting sync...");
       return syncTime();
     }
   }
@@ -156,7 +157,7 @@ bool NTPService::syncTimeIfNeeded() {
 String NTPService::getCurrentTime() {
   // Try to initialize if not done yet (for late WiFi connection)
   if (!initialized && WiFi.status() == WL_CONNECTED) {
-    Serial.println("[NTP] Late initialization attempt...");
+    Serial_println("[NTP] Late initialization attempt...");
     initialize();
   }
   
@@ -213,7 +214,7 @@ String NTPService::getCurrentTime() {
 String NTPService::getCurrentDateTime() {
   // Late initialization attempt if not initialized but WiFi is connected
   if (!initialized && WiFi.status() == WL_CONNECTED) {
-    Serial.println("[NTP] Late initialization attempt...");
+    Serial_println("[NTP] Late initialization attempt...");
     initialize();
   }
   
@@ -276,12 +277,12 @@ void NTPService::setupNTPClientWithServer(const char* server) {
   ntpUDP = new WiFiUDP();
   timeClient = new NTPClient(*ntpUDP, server, timezoneOffset, 10000); // 10 second timeout
   
-  Serial.printf("[NTP] Configured: Server=%s, Offset=%d seconds, Timeout=10s\n", 
+  Serial_printf("[NTP] Configured: Server=%s, Offset=%d seconds, Timeout=10s\n", 
                server, timezoneOffset);
   
   // Test UDP connection
   if (ntpUDP->begin(123)) { // NTP port
-    Serial.println("[NTP] UDP port 123 opened successfully");
+    Serial_println("[NTP] UDP port 123 opened successfully");
     
     // Test UDP connectivity by sending a test packet
     IPAddress testIP(8, 8, 8, 8); // Google DNS for test
@@ -289,16 +290,16 @@ void NTPService::setupNTPClientWithServer(const char* server) {
       uint8_t testData[] = {'t', 'e', 's', 't'};
       ntpUDP->write(testData, 4);
       if (ntpUDP->endPacket()) {
-        Serial.println("[NTP] UDP connectivity test: OK");
+        Serial_println("[NTP] UDP connectivity test: OK");
       } else {
-        Serial.println("[NTP] UDP connectivity test: FAILED (this is normal for some networks)");
+        Serial_println("[NTP] UDP connectivity test: FAILED (this is normal for some networks)");
       }
     } else {
-      Serial.println("[NTP] UDP connectivity test: SKIPPED (packet creation failed)");
+      Serial_println("[NTP] UDP connectivity test: SKIPPED (packet creation failed)");
     }
   } else {
-    Serial.println("[NTP] WARNING: Failed to open UDP port 123");
-    Serial.println("[NTP] This usually means the modem/router is blocking UDP");
+    Serial_println("[NTP] WARNING: Failed to open UDP port 123");
+    Serial_println("[NTP] This usually means the modem/router is blocking UDP");
   }
 }
 
