@@ -238,10 +238,16 @@ HEALTH_CHECK_UNHEALTHY_PATTERNS="status":"unhealthy","status":"down","status":"e
 - **Network Info**: `IP: 192.168.1.162 | -45 dBm`
 - **Performance**: `Cpu: 45% | Ram: 32% | Heap: 107KB`
 
-### Status Colors
-- 🟢 **Green**: Target UP with good latency (<500ms)
-- 🔵 **Blue**: Target UP with slow latency (≥500ms)
-- 🔴 **Red**: Target DOWN
+### Target Status Colors
+- 🟢 **Green**: Target OK (healthy response)
+- 🟠 **Orange**: Target SLOW (slow response/latency)
+- 🔴 **Red**: Target DOWN (unhealthy/no response)
+
+### LED Indicator Colors
+- 🔴 **Red Solid**: Alert Active (targets down)
+- 🟢 **Green Solid**: Idle (no alerts, system normal)
+- 🔵 **Blue Solid**: Scanner Active (monitoring in progress)
+- 🔴 **Red Blinking**: WiFi Off (no network connection)
 
 ## 🔍 Network Monitoring
 

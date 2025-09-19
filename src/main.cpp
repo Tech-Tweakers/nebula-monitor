@@ -51,7 +51,7 @@ void setup() {
   delay(2000);
   
   LOG_LEGACY("========================================");
-  LOG_LEGACY("    NEBULA MONITOR v2.5 - CLEAN ARCH");
+  LOG_LEGACY("    NEBULA MONITOR v2.4 - CLEAN ARCH");
   LOG_LEGACY("========================================");
   
   // 1. Load configuration

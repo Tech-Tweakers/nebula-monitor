@@ -128,7 +128,7 @@ void TelegramService::sendTestMessage(const String* targetNames, int targetCount
     return;
   }
 
-  String testMessage = "🤖 <b>Nebula Monitor v2.5</b>\n";
+  String testMessage = "🤖 <b>Nebula Monitor v2.4</b>\n";
   testMessage += "✅ <b>System Initialized Successfully!</b>\n\n";
   
   // WiFi Status
