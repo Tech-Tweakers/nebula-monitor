@@ -122,7 +122,7 @@ void DisplayManager::createMainScreen() {
   
   // Create title label
   title_label = lv_label_create(title_bar);
-  lv_label_set_text(title_label, "Nebula Monitor v2.5");
+  lv_label_set_text(title_label, "Nebula Monitor v2.4");
   lv_obj_set_style_text_color(title_label, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
   lv_obj_center(title_label);
   
