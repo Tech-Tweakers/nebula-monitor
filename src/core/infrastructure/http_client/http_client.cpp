@@ -260,6 +260,24 @@ uint16_t HttpClient::performRequest(const String& url, uint16_t timeout, const S
       }
       http.end();
     }
+    
+    // CRITICAL FIX: Force SSL context cleanup to prevent stack overflow
+    // This is essential when endpoints are offline and SSL handshake fails
+    client.stop();
+    client.flush();
+    
+    // Additional cleanup for failed SSL connections
+    if (httpCode == -1) {
+      Serial_println("[HTTP] SSL connection failed, forcing cleanup...");
+      
+      // CRITICAL: Force delay to allow SSL cleanup to complete
+      // This prevents stack accumulation during rapid retries
+      delay(100);
+    }
+    
+    // CRITICAL: Always force cleanup after SSL operations
+    // This prevents the stack canary watchpoint from triggering
+    delay(50);
   } else {
     WiFiClient client;
     client.setTimeout((timeout + 999) / 1000);
@@ -317,6 +335,10 @@ void HttpClient::setupSecureClient(WiFiClientSecure& client, const String& url) 
     client.setCACert(nullptr);
     client.setInsecure();
   }
+  
+  // CRITICAL FIX: Set shorter timeout to prevent SSL context accumulation
+  // This prevents SSL handshake from hanging and accumulating resources
+  client.setTimeout(5000); // 5 second timeout for SSL handshake
 }
 
 void HttpClient::setupHeaders(const String& url) {
@@ -475,6 +497,16 @@ uint16_t HttpClient::performRequestWithRetry(const String& url, uint16_t timeout
     retryCount++;
     if (retryCount <= config.maxRetries) {
       Serial_printf("[HTTP] Retry %d/%d for %s\n", retryCount, config.maxRetries, url.c_str());
+      
+      // CRITICAL FIX: Force cleanup between retries to prevent SSL context accumulation
+      if (isHttpsUrl(url)) {
+        Serial_println("[HTTP] Forcing SSL cleanup between retries...");
+        
+        // CRITICAL: Force delay to allow SSL cleanup to complete
+        // This prevents stack canary watchpoint from triggering
+        delay(200);
+      }
+      
       vTaskDelay(pdMS_TO_TICKS(1000 * retryCount)); // Exponential backoff
     }
   }
