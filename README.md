@@ -1,9 +1,9 @@
 # 🌌 Nebula Monitor v2.5
 
-> **ESP32 TFT Network Monitor Dashboard** - Complete modularization with Clean Architecture, intelligent timeout management, and 24/7 stability
+> **ESP32 TFT Network Monitor Dashboard** - Production-ready network monitoring with SSL protection, manual garbage collection, and 24/7 stability
 
 [![PlatformIO](https://img.shields.io/badge/PlatformIO-ESP32-blue.svg)](https://platformio.org/)
-[![LVGL](https://img.shields.io/badge/LVGL-8.3.11-green.svg)](https://lvgl.io/)
+[![LVGL](https://img.shields.io/badge/LVGL-8.4.0-green.svg)](https://lvgl.io/)
 [![TFT_eSPI](https://img.shields.io/badge/TFT_eSPI-Latest-orange.svg)](https://github.com/Bodmer/TFT_eSPI)
 [![Telegram](https://img.shields.io/badge/Telegram-Alerts-blue.svg)](https://telegram.org/)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/Tech-Tweakers/nebula-monitor)
@@ -26,18 +26,16 @@
 
 ## 🎯 Overview
 
-**Nebula Monitor v2.5** is a production-ready network monitoring dashboard for ESP32 TFT displays. Built with complete Clean Architecture modularization, it provides 24/7 stability through intelligent timeout management, automatic alert reset, and full system control.
+**Nebula Monitor v2.5** is a production-ready network monitoring dashboard for ESP32 TFT displays. Built with clean architecture principles, it provides 24/7 stability through SSL protection, manual garbage collection, and intelligent memory management.
 
 ### 🎪 Key Features
 
-- **🏗️ Complete Clean Architecture**: Full modularization with dedicated folders
-- **⏱️ Intelligent Timeout Management**: 10s timeout with UNKNOWN status for slow connections
-- **🔄 Automatic Alert Reset**: Clean state after recovery for consistent behavior
-- **📅 Real-time Date/Time**: NTP-synchronized timestamps in all messages
-- **🚫 Watchdog Bypass**: Full application control without system interference
-- **💓 Aggressive Heartbeat**: 500ms watchdog feeding for maximum stability
-- **🚨 Enhanced Telegram Alerts**: Rich analytics with date/time information
-- **🔄 Hybrid Monitoring**: PING + Health Check with UNKNOWN status support
+- **🏗️ Clean Architecture**: Modular design with dependency injection
+- **🔒 SSL Protection**: Safe handling of HTTPS endpoints without crashes
+- **🧠 Manual Garbage Collection**: Prevents memory leaks and system reboots
+- **📊 Dynamic Footer**: 3 optimized modes with real-time data
+- **🚨 Telegram Alerts**: Smart notifications with cooldown management
+- **🔄 Hybrid Monitoring**: PING + Health Check for comprehensive coverage
 - **⚡ 24/7 Stability**: Tested for continuous operation without reboots
 - **📱 Touch Interface**: Responsive LVGL-based UI with visual feedback
 
@@ -58,11 +56,11 @@
 - **Connection Quality Metrics**: UNKNOWN status provides network quality insights
 - **Race Condition Prevention**: GC deferred during active scans
 
-### 🔒 SSL Thread Safety
-- **Mutex Management**: Thread-safe SSL operations
-- **RAII Wrapper**: Automatic lock/unlock with SSLLock class
-- **Statistics Tracking**: Performance monitoring and debugging
+### 🔒 SSL Security
+- **Thread Safety**: Mutex-managed SSL operations
+- **Context Cleanup**: Proper SSL resource management
 - **Timeout Management**: Configurable operation timeouts
+- **Error Recovery**: Graceful handling of SSL failures
 
 ### 📊 Dynamic Footer (3 Modes)
 - **System Overview**: `Alerts: X | On: Y/Z | Up: HH:MM`
@@ -83,18 +81,14 @@
 - **Health Check**: API endpoint verification with JSON parsing
 - **Multi-target**: Up to 6 simultaneous targets
 - **Real-time Latency**: Response time tracking
-- **UNKNOWN Status**: New status for timeout scenarios (first implementation)
-- **Smart Recovery**: Automatic retry in next scan cycle
-- **Connection Quality Metrics**: UNKNOWN provides network quality insights
-
+- **Protocol Support**: HTTP and HTTPS with proper SSL handling
 
 ## 🔧 Hardware Requirements
 
 - **Board**: ESP32-2432S028R (new CYB/CYD variant)
 - **TFT Display**: ST7789 (240x320), rotation 2
 - **Touch Controller**: XPT2046 (resistive)
-- **Storage**: microSD (VSPI)
-- **Note**: This README is the canonical documentation for this newer CYB variant; use it as the reference.
+- **Storage**: microSD (VSPI) + SPIFFS (runtime)
 
 ### Pin Configuration
 
@@ -129,7 +123,6 @@ Notes:
 - SD uses VSPI with `CS=GPIO 5`.
 - Backlight on `GPIO 27` (active HIGH). TFT reset not connected (`TFT_RST=-1`).
 - LED defaults: R=16, G=17, B=20, active LOW (common anode). Overridable via `data/config.env`.
-- Configuration is provided via build flags in `platformio.ini` (`USER_SETUP_LOADED=1`); `include/User_Setup.h` is ignored.
 
 ## 📦 Dependencies
 
@@ -137,10 +130,13 @@ Notes:
 lib_deps =
   TFT_eSPI                    # TFT display driver
   XPT2046_Touchscreen         # Touch controller
-  lvgl/lvgl@^8.3.11           # UI framework
-  ArduinoJson@^6.21.3         # JSON parsing
+  lvgl/lvgl@^8.4.0           # UI framework
+  ArduinoJson@^6.21.5         # JSON parsing
   HTTPClient@^2.0.0           # HTTP client
   WiFiClientSecure@^2.0.0     # HTTPS support
+  NTPClient@^3.2.1            # NTP time sync
+  SD@^2.0.0                   # SD card support
+  SPIFFS@^2.0.0               # SPIFFS filesystem
 ```
 
 ## 🚀 Quick Start
@@ -160,6 +156,7 @@ TELEGRAM_BOT_TOKEN=your_bot_token_here
 TELEGRAM_CHAT_ID=your_chat_id_here
 TARGET_1=Proxmox HV|http://192.168.1.128:8006/||PING
 TARGET_2=Router|http://192.168.1.1||PING
+TARGET_3=API Server|https://api.example.com|/health|HEALTH_CHECK
 ```
 
 3. **Upload and run**:
@@ -184,12 +181,36 @@ TARGET_N=NAME|URL|HEALTH_ENDPOINT|MONITOR_TYPE
 
 ### Key Settings
 ```env
+# WiFi Configuration
 WIFI_SSID=YourWiFiName
 WIFI_PASS=YourWiFiPassword
+
+# Telegram Bot
 TELEGRAM_BOT_TOKEN=your_bot_token_here
 TELEGRAM_CHAT_ID=your_chat_id_here
+TELEGRAM_ENABLED=true
+
+# Alert Configuration
 MAX_FAILURES_BEFORE_ALERT=3
 ALERT_COOLDOWN_MS=300000
+ALERT_RECOVERY_COOLDOWN_MS=60000
+
+# Performance
+SCAN_INTERVAL_MS=90000
+HTTP_TIMEOUT_MS=2000
+
+# Debug (optional)
+DEBUG_LOGS_ENABLED=false
+SILENT_MODE=true
+```
+
+### Health Check Patterns
+```env
+# Healthy response patterns (case-insensitive)
+HEALTH_CHECK_HEALTHY_PATTERNS="status":"healthy","status":"ok","status":"up","status":"running","health":"ok","health":"healthy","health":"up","ok","healthy","up"
+
+# Unhealthy response patterns (case-insensitive)
+HEALTH_CHECK_UNHEALTHY_PATTERNS="status":"unhealthy","status":"down","status":"error","status":"failed","health":"unhealthy","health":"down","502 bad gateway","503 service unavailable","504 gateway timeout","500 internal server error"
 ```
 
 ## 📱 User Interface
@@ -197,15 +218,15 @@ ALERT_COOLDOWN_MS=300000
 ### Main Screen Layout
 ```
 ┌─────────────────────────────────┐
-│        Nebula Monitor v2.4      │ ← Title Bar
+│        Nebula Monitor v2.5      │ ← Title Bar
 ├─────────────────────────────────┤
 │ ┌─────────────────────────────┐ │
 │ │ Proxmox HV      [123 ms]    │ │ ← Status Items
 │ │ Router #1       [45 ms]     │ │
 │ │ Router #2       [DOWN]      │ │
-│ │ Polaris API     [OK]        │ │
-│ │ Polaris INT     [OK]        │ │
-│ │ Polaris WEB     [OK]        │ │
+│ │ API Server      [OK]        │ │
+│ │ Web Service     [OK]        │ │
+│ │ Database        [OK]        │ │
 │ └─────────────────────────────┘ │
 ├─────────────────────────────────┤
 │ Alerts: 0 | On: 6/6 | Up: 01:23 │ ← Dynamic Footer (3 modes)
@@ -221,7 +242,6 @@ ALERT_COOLDOWN_MS=300000
 - 🟢 **Green**: Target UP with good latency (<500ms)
 - 🔵 **Blue**: Target UP with slow latency (≥500ms)
 - 🔴 **Red**: Target DOWN
-- 🟡 **Yellow**: Target UNKNOWN (timeout/connection issues)
 
 ## 🔍 Network Monitoring
 
@@ -229,14 +249,14 @@ ALERT_COOLDOWN_MS=300000
 - **PING**: Basic HTTP GET requests (10s timeout)
 - **Health Check**: API endpoint verification with JSON parsing
 - **Sequential**: One target at a time for stability
-- **30s intervals**: Optimized for 24/7 operation
-- **UNKNOWN Status**: Timeout scenarios marked as UNKNOWN
-- **Smart Recovery**: Automatic retry in next scan cycle
+- **90s intervals**: Optimized for 24/7 operation
+- **SSL Support**: Safe handling of HTTPS endpoints
 
 ### Supported Protocols
-- **HTTP/HTTPS**: Full protocol support
+- **HTTP/HTTPS**: Full protocol support with SSL protection
 - **JSON Parsing**: Health check response analysis
 - **Auto Fallback**: HTTP fallback for HTTPS failures
+- **Timeout Management**: Intelligent timeout handling per service type
 
 ## 🛠️ Development
 
@@ -245,6 +265,7 @@ ALERT_COOLDOWN_MS=300000
 pio run --target clean    # Clean build
 pio run                   # Build project
 pio run --target upload   # Upload firmware
+pio run --target uploadfs # Upload SPIFFS filesystem
 pio device monitor        # Monitor serial output
 ```
 
@@ -253,7 +274,9 @@ pio device monitor        # Monitor serial output
 # In data/config.env
 DEBUG_LOGS_ENABLED=true
 TOUCH_LOGS_ENABLED=true
+TELEGRAM_LOGS_ENABLED=true
 ALL_LOGS_ENABLED=true
+SILENT_MODE=false
 ```
 
 ### Common Issues
@@ -261,6 +284,7 @@ ALL_LOGS_ENABLED=true
 2. **Display Not Working**: Verify pin connections
 3. **Touch Not Responding**: Check touch calibration
 4. **Telegram Alerts Not Working**: Check bot token and chat ID
+5. **Random Reboots**: Ensure using v2.5+ with SSL protection
 
 ## 📁 Project Structure
 
@@ -268,31 +292,17 @@ ALL_LOGS_ENABLED=true
 nebula-monitor/
 ├── src/
 │   ├── core/
-│   │   ├── domain/
-│   │   │   ├── alert/         # Alert management
-│   │   │   ├── status/        # Status definitions
-│   │   │   └── target/        # Target management
-│   │   └── infrastructure/
-│   │       ├── http_client/   # HTTP operations
-│   │       ├── memory_manager/ # Memory management
-│   │       ├── ntp_service/   # NTP synchronization
-│   │       ├── telegram_service/ # Telegram alerts
-│   │       ├── wifi_service/  # WiFi management
-│   │       ├── ssl_mutex_manager/ # SSL thread safety
-│   │       └── sdcard_manager/ # SD card operations
-│   ├── tasks/
-│   │   └── task_manager/      # FreeRTOS task management
-│   ├── ui/
-│   │   ├── display_manager/   # TFT display management
-│   │   ├── touch_handler/     # Touch input handling
-│   │   └── led_controller/    # RGB LED control
-│   └── config/
-│       └── config_loader/     # Configuration management
+│   │   ├── domain/            # Target, Alert, Status, NetworkMonitor
+│   │   └── infrastructure/    # MemoryManager, SSLMutexManager, HttpClient, etc.
+│   ├── ui/                    # DisplayManager, TouchHandler, LEDController
+│   ├── config/                # ConfigLoader
+│   └── main.cpp               # Application entry point
 ├── data/
 │   └── config.env             # External configuration
 ├── include/
 │   ├── lv_conf.h              # LVGL configuration
 │   └── User_Setup.h           # TFT configuration
+├── tools/                     # Utility tools
 ├── platformio.ini             # Build configuration
 └── README.md                  # This file
 ```
@@ -326,23 +336,29 @@ nebula-monitor/
 - Send a message to the bot first
 - Check network connectivity
 
+**Random reboots**:
+- Update to v2.5+ for SSL protection
+- Check for problematic HTTPS endpoints
+- Monitor system logs for errors
+
 ### Debug Output
 ```bash
 pio device monitor --baud 115200
 ```
 
-Key debug messages: `[MAIN]`, `[NET]`, `[SCANNER]`, `[TELEGRAM]`, `[TOUCH]`, `[FOOTER]`
+Key debug messages: `[MAIN]`, `[NETWORK_MONITOR]`, `[HTTP]`, `[TELEGRAM]`, `[TOUCH]`, `[MEMORY_MANAGER]`
 
 ## 📈 Performance
 
 ### System Performance
-- **Flash**: 93.5% (1,225,821 bytes of 1,310,720 bytes)
-- **RAM**: 33.2% (108,916 bytes of 327,680 bytes)
-- **Free Heap**: ~220KB available for operations
+- **Flash**: 97.7% (1,280,497 bytes of 1,310,720 bytes)
+- **RAM**: 33.4% (109,440 bytes of 327,680 bytes)
+- **Free Heap**: ~218KB available for operations
+- **Stack Usage**: Optimized to prevent overflow
 
 ### Network Performance
-- **Scan Interval**: 30 seconds per cycle
-- **HTTP Timeout**: 10 seconds (intelligent timeout management)
+- **Scan Interval**: 90 seconds per cycle
+- **HTTP Timeout**: 2-8 seconds (configurable per service type)
 - **Sequential Scanning**: One target at a time for stability
 - **Alert Cooldown**: 5 minutes between alerts
 - **UNKNOWN Status**: Timeout scenarios marked as UNKNOWN
@@ -358,8 +374,8 @@ Key debug messages: `[MAIN]`, `[NET]`, `[SCANNER]`, `[TELEGRAM]`, `[TOUCH]`, `[F
 
 ### 24/7 Stability
 - **Tested**: Continuous operation without reboots
-- **Memory Leaks**: Prevented by intelligent garbage collection
-- **SSL Safety**: Thread-safe operations with mutex
+- **Memory Leaks**: Prevented by manual garbage collection
+- **SSL Safety**: Thread-safe operations with proper cleanup
 - **Error Handling**: Robust error recovery mechanisms
 - **Watchdog Bypass**: Full application control without system interference
 - **Intelligent Timeouts**: Prevents system hangs on slow connections
@@ -378,6 +394,7 @@ Key debug messages: `[MAIN]`, `[NET]`, `[SCANNER]`, `[TELEGRAM]`, `[TOUCH]`, `[F
 - Network monitoring features
 - UI/UX improvements
 - Performance optimizations
+- SSL security enhancements
 - Documentation improvements
 
 ## 📄 License
@@ -389,5 +406,7 @@ MIT License - see [LICENSE](LICENSE) file for details.
 <div align="center">
 
 Made with ❤️ for the ESP32 community
+
+**Nebula Monitor v2.5** - Production-ready network monitoring! 🌌✨
 
 </div>
