@@ -3,18 +3,20 @@
 #include <TFT_eSPI.h>
 
 // Core includes
-#include "core/domain/status.h"
-#include "core/application/network_monitor.h"
-#include "core/infrastructure/wifi_service.h"
-#include "core/infrastructure/http_client.h"
-#include "core/infrastructure/telegram_service.h"
-#include "core/infrastructure/ssl_mutex_manager.h"
-#include "core/infrastructure/memory_manager.h"
-#include "ui/display_manager.h"
-#include "ui/touch_handler.h"
-#include "ui/led_controller.h"
-#include "tasks/task_manager.h"
-#include "config/config_loader.h"
+#include "core/domain/status/status.h"
+#include "core/domain/network_monitor/network_monitor.h"
+#include "core/infrastructure/wifi_service/wifi_service.h"
+#include "core/infrastructure/http_client/http_client.h"
+#include "core/infrastructure/telegram_service/telegram_service.h"
+#include "core/infrastructure/ssl_mutex_manager/ssl_mutex_manager.h"
+#include "core/infrastructure/memory_manager/memory_manager.h"
+#include "core/infrastructure/ntp_service/ntp_service.h"
+#include "core/infrastructure/logger/logger.h"
+#include "ui/display_manager/display_manager.h"
+#include "ui/touch_handler/touch_handler.h"
+#include "ui/led_controller/led_controller.h"
+#include "core/infrastructure/task_manager/task_manager.h"
+#include "config/config_loader/config_loader.h"
 
 // Global instances
 WiFiService* wifiService;
@@ -48,20 +50,23 @@ void setup() {
   Serial.begin(115200);
   delay(2000);
   
-  Serial.println("========================================");
-  Serial.println("    NEBULA MONITOR v2.4 - CLEAN ARCH");
-  Serial.println("========================================");
+  LOG_LEGACY("========================================");
+  LOG_LEGACY("    NEBULA MONITOR v2.5 - CLEAN ARCH");
+  LOG_LEGACY("========================================");
   
   // 1. Load configuration
   Serial.println("[MAIN] Loading configuration...");
   if (!ConfigLoader::load()) {
-    Serial.println("[MAIN] ERROR: Failed to load configuration!");
+    Serial.println("[ERROR] Failed to load configuration!");
     return;
   }
   Serial.println("[MAIN] Configuration loaded successfully!");
   
+  // 1.5. Initialize logger interface after ConfigLoader is loaded
+  ConfigLoader::initializeLoggerInterface();
+  
   // 2. Initialize TFT display
-  Serial.println("[MAIN] Initializing TFT display...");
+  LOG_MAIN("Initializing TFT display...");
   tft = new TFT_eSPI();
   tft->init();
   tft->setRotation(2);
@@ -72,7 +77,7 @@ void setup() {
   digitalWrite(27, HIGH);
   
   // 3. Initialize LVGL
-  Serial.println("[MAIN] Initializing LVGL...");
+  LOG_MAIN("Initializing LVGL...");
   lv_init();
   
   // Initialize display buffer
@@ -87,7 +92,7 @@ void setup() {
   lv_disp_drv_register(&disp_drv);
   
   // 4. Create service instances
-  Serial.println("[MAIN] Creating service instances...");
+  LOG_MAIN("Creating service instances...");
   wifiService = new WiFiService();
   httpClient = new HttpClient();
   telegramService = new TelegramService();
@@ -96,32 +101,43 @@ void setup() {
   taskManager = new TaskManager();
   
   // 5. Configure dependencies
-  Serial.println("[MAIN] Configuring dependencies...");
+  LOG_MAIN("Configuring dependencies...");
   networkMonitor->setDependencies(wifiService, httpClient, telegramService, displayManager, taskManager);
   taskManager->setDependencies(networkMonitor, displayManager);
   
   // 6. Initialize memory manager (Garbage Collection)
-  Serial.println("[MAIN] Initializing memory manager...");
+  LOG_MAIN("Initializing memory manager...");
   if (!MemoryManager::getInstance().initialize()) {
-    Serial.println("[MAIN] ERROR: Failed to initialize memory manager!");
+    LOG_ERROR("Failed to initialize memory manager!");
     return;
   }
   
   // 7. Initialize SSL mutex manager
-  Serial.println("[MAIN] Initializing SSL mutex manager...");
+  LOG_MAIN("Initializing SSL mutex manager...");
   if (!SSLMutexManager::initialize()) {
-    Serial.println("[MAIN] ERROR: Failed to initialize SSL mutex manager!");
+    LOG_ERROR("Failed to initialize SSL mutex manager!");
     return;
   }
   
   // 8. Initialize services
-  Serial.println("[MAIN] Initializing services...");
+  LOG_MAIN("Initializing services...");
   
   // Initialize WiFi
   String ssid = ConfigLoader::getWifiSSID();
   String password = ConfigLoader::getWifiPassword();
   if (!wifiService->initialize(ssid, password)) {
-    Serial.println("[MAIN] WARNING: WiFi initialization failed, will retry...");
+    LOG_WARN("WiFi initialization failed, will retry...");
+  }
+  
+  // Initialize NTP service (after WiFi)
+  if (WiFi.status() == WL_CONNECTED) {
+    if (NTPService::initialize()) {
+      LOG_MAIN("NTP service initialized!");
+    } else {
+      LOG_WARN("NTP service failed to initialize!");
+    }
+  } else {
+    LOG_WARN("WiFi not connected, skipping NTP initialization");
   }
   
   // Initialize Telegram
@@ -129,20 +145,20 @@ void setup() {
   String chatId = ConfigLoader::getTelegramChatId();
   bool telegramEnabled = ConfigLoader::isTelegramEnabled();
   if (telegramService->initialize(botToken, chatId, telegramEnabled)) {
-    Serial.println("[MAIN] Telegram service initialized!");
+    LOG_MAIN("Telegram service initialized!");
   } else {
-    Serial.println("[MAIN] Telegram service not available");
+    LOG_MAIN("Telegram service not available");
   }
   
   // Initialize display manager
   if (!displayManager->initialize()) {
-    Serial.println("[MAIN] ERROR: Failed to initialize display manager!");
+    LOG_ERROR("Failed to initialize display manager!");
     return;
   }
   
   // Initialize network monitor
   if (!networkMonitor->initialize()) {
-    Serial.println("[MAIN] ERROR: Failed to initialize network monitor!");
+    LOG_ERROR("Failed to initialize network monitor!");
     return;
   }
   
@@ -159,40 +175,40 @@ void setup() {
       }
       telegramService->sendTestMessage(targetNames, targetCount);
     } else {
-      Serial.println("[MAIN] WARNING: No targets loaded, skipping Telegram test message");
+      LOG_WARN("No targets loaded, skipping Telegram test message");
     }
   }
   
   // Initialize LED controller
   if (!LEDController::initialize()) {
-    Serial.println("[MAIN] WARNING: Failed to initialize LED controller!");
+    LOG_WARN("Failed to initialize LED controller!");
   }
   
   // Initialize touch handler
   if (!TouchHandler::initialize()) {
-    Serial.println("[MAIN] WARNING: Failed to initialize touch handler!");
+    LOG_WARN("Failed to initialize touch handler!");
   }
   
   // 9. Initialize task manager
   if (!taskManager->initialize()) {
-    Serial.println("[MAIN] ERROR: Failed to initialize task manager!");
+    LOG_ERROR("Failed to initialize task manager!");
     return;
   }
   
   // 10. Start tasks
-  Serial.println("[MAIN] Starting FreeRTOS tasks...");
+  LOG_MAIN("Starting FreeRTOS tasks...");
   if (!taskManager->startTasks()) {
-    Serial.println("[MAIN] ERROR: Failed to start tasks!");
+    LOG_ERROR("Failed to start tasks!");
     return;
   }
   
-  Serial.println("========================================");
-  Serial.println("    SYSTEM INITIALIZED SUCCESSFULLY!");
-  Serial.println("========================================");
-  Serial.printf("Targets: %d\n", networkMonitor->getTargetCount());
-  Serial.printf("WiFi: %s\n", wifiService->isConnected() ? "Connected" : "Disconnected");
-  Serial.printf("Telegram: %s\n", telegramService->isActive() ? "Active" : "Inactive");
-  Serial.println("========================================");
+  LOG_LEGACY("========================================");
+  LOG_LEGACY("    SYSTEM INITIALIZED SUCCESSFULLY!");
+  LOG_LEGACY("========================================");
+  LOG_LEGACY_F("Targets: %d", networkMonitor->getTargetCount());
+  LOG_LEGACY_F("WiFi: %s", wifiService->isConnected() ? "Connected" : "Disconnected");
+  LOG_LEGACY_F("Telegram: %s", telegramService->isActive() ? "Active" : "Inactive");
+  LOG_LEGACY("========================================");
 }
 
 void loop() {
@@ -205,7 +221,7 @@ void loop() {
   
   // Heartbeat every 30 seconds
   if (now - lastHeartbeat >= 30000) {
-    Serial.println("[MAIN] System running...");
+    LOG_MAIN("System running...");
     
     // Print memory stats with heartbeat
     MemoryManager::getInstance().printMemoryStats();
