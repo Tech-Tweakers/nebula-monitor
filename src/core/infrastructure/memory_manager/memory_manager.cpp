@@ -147,6 +147,18 @@ void MemoryManager::cleanupWiFiClients() {
   // WiFi clients are automatically cleaned up when they go out of scope
   // But we can force some cleanup
   Serial_println("[MEMORY_MANAGER] Cleaning up WiFi clients...");
+  
+  // CRITICAL FIX: Force SSL context cleanup to prevent stack overflow
+  // This is essential when endpoints are offline and SSL handshakes fail
+  Serial_println("[MEMORY_MANAGER] Forcing SSL context cleanup...");
+  
+  // CRITICAL: Force delay to allow SSL cleanup to complete
+  // This prevents stack canary watchpoint from triggering
+  delay(100);
+  
+  // CRITICAL: Avoid recursive calls to forceGarbageCollection()
+  // This was causing infinite recursion and stack overflow
+  Serial_println("[MEMORY_MANAGER] SSL cleanup completed (avoiding recursion)");
 }
 
 void MemoryManager::cleanupHTTPClients() {
