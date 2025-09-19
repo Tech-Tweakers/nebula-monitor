@@ -6,6 +6,7 @@
 [![LVGL](https://img.shields.io/badge/LVGL-8.4.0-green.svg)](https://lvgl.io/)
 [![TFT_eSPI](https://img.shields.io/badge/TFT_eSPI-Latest-orange.svg)](https://github.com/Bodmer/TFT_eSPI)
 [![Telegram](https://img.shields.io/badge/Telegram-Alerts-blue.svg)](https://telegram.org/)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/Tech-Tweakers/nebula-monitor)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![GitHub](https://img.shields.io/badge/GitHub-Tech--Tweakers-black.svg)](https://github.com/Tech-Tweakers)
 
@@ -40,12 +41,20 @@
 
 ## ✨ Features
 
-### 🧠 Memory Management System
-- **Manual Garbage Collection**: Prevents memory leaks and system reboots
+### 🧠 Advanced Memory Management
+- **Intelligent Garbage Collection**: Deferred during active scans to prevent interruptions
 - **String Pool**: Optimized string allocation and deallocation
 - **Memory Monitoring**: Real-time heap and stack usage tracking
-- **Watchdog Feeding**: Automatic ESP32 watchdog timer management
+- **Watchdog Bypass**: Full application control without system interference
 - **Emergency Cleanup**: Critical memory pressure handling
+- **Heartbeat System**: Aggressive 500ms feeding for maximum stability
+
+### ⏱️ Intelligent Timeout Management
+- **10s Timeout**: Prevents system hangs on slow connections
+- **UNKNOWN Status**: New status for timeout scenarios (first implementation)
+- **Smart Recovery**: Automatic retry in next scan cycle
+- **Connection Quality Metrics**: UNKNOWN status provides network quality insights
+- **Race Condition Prevention**: GC deferred during active scans
 
 ### 🔒 SSL Security
 - **Thread Safety**: Mutex-managed SSL operations
@@ -58,14 +67,17 @@
 - **Network Info**: `IP: 192.168.1.162 | -45 dBm`
 - **Performance**: `Cpu: 45% | Ram: 32% | Heap: 107KB`
 
-### 🚨 Telegram Alerts
+### 🚨 Enhanced Telegram Alerts
 - **Smart Thresholds**: Configurable failure count (default: 3)
 - **Cooldown Management**: 5-minute alert intervals
-- **Recovery Notifications**: Service restoration alerts
+- **Recovery Notifications**: Service restoration alerts with analytics
+- **Real-time Timestamps**: NTP-synchronized date/time in all messages
+- **Automatic Alert Reset**: Clean state after recovery for consistent behavior
+- **Rich Analytics**: First failure time, alert start time, recovery time
 - **Rich Formatting**: Emojis and detailed information
 
-### 🔄 Hybrid Monitoring
-- **PING**: Basic connectivity checks
+### 🔄 Enhanced Hybrid Monitoring
+- **PING**: Basic connectivity checks with 10s timeout
 - **Health Check**: API endpoint verification with JSON parsing
 - **Multi-target**: Up to 6 simultaneous targets
 - **Real-time Latency**: Response time tracking
@@ -230,12 +242,11 @@ HEALTH_CHECK_UNHEALTHY_PATTERNS="status":"unhealthy","status":"down","status":"e
 - 🟢 **Green**: Target UP with good latency (<500ms)
 - 🔵 **Blue**: Target UP with slow latency (≥500ms)
 - 🔴 **Red**: Target DOWN
-- ⚪ **Gray**: Target UNKNOWN (timeout/error)
 
 ## 🔍 Network Monitoring
 
-### Hybrid Scanning
-- **PING**: Basic HTTP GET requests (5s timeout)
+### Enhanced Hybrid Scanning
+- **PING**: Basic HTTP GET requests (10s timeout)
 - **Health Check**: API endpoint verification with JSON parsing
 - **Sequential**: One target at a time for stability
 - **90s intervals**: Optimized for 24/7 operation
@@ -350,18 +361,25 @@ Key debug messages: `[MAIN]`, `[NETWORK_MONITOR]`, `[HTTP]`, `[TELEGRAM]`, `[TOU
 - **HTTP Timeout**: 2-8 seconds (configurable per service type)
 - **Sequential Scanning**: One target at a time for stability
 - **Alert Cooldown**: 5 minutes between alerts
+- **UNKNOWN Status**: Timeout scenarios marked as UNKNOWN
+- **Smart Recovery**: Automatic retry in next scan cycle
 
-### Memory Management
-- **Garbage Collection**: Automatic every 2 minutes
+### Advanced Memory Management
+- **Intelligent Garbage Collection**: Deferred during active scans
 - **String Pool**: 10-string pool for optimization
-- **Watchdog Feeding**: Continuous to prevent reboots
+- **Watchdog Bypass**: Full application control
+- **Heartbeat System**: Aggressive 500ms feeding
 - **Memory Monitoring**: Real-time heap and stack tracking
+- **Race Condition Prevention**: GC deferred during scans
 
 ### 24/7 Stability
 - **Tested**: Continuous operation without reboots
 - **Memory Leaks**: Prevented by manual garbage collection
 - **SSL Safety**: Thread-safe operations with proper cleanup
 - **Error Handling**: Robust error recovery mechanisms
+- **Watchdog Bypass**: Full application control without system interference
+- **Intelligent Timeouts**: Prevents system hangs on slow connections
+- **Automatic Alert Reset**: Clean state for consistent behavior
 
 ## 🤝 Contributing
 
