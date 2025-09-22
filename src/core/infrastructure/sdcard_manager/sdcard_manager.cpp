@@ -178,10 +178,12 @@ bool SDCardManager::isSDConfigNewer() {
   spiffsFile.close();
   
   // Strategy 1: Try timestamp comparison (most reliable when NTP is working)
-  bool timestampResult = compareByTimestamp();
-  if (timestampResult != false) { // If we got a definitive result
-    Serial_println("[SDCARD] DEBUG: Using timestamp comparison result");
-    return timestampResult;
+  int timestampResult = compareByTimestamp();
+  if (timestampResult != -1) { // If we got a definitive result (not "cannot determine")
+    bool isNewer = (timestampResult == 1);
+    Serial_printf("[SDCARD] DEBUG: Using timestamp comparison result: SD is %s\n", 
+                 isNewer ? "newer" : "same/older");
+    return isNewer;
   }
   
   // Strategy 2: Compare content hashes (more reliable than size)
@@ -353,7 +355,7 @@ uint32_t SDCardManager::calculateFileHash(File& file) {
   return hash;
 }
 
-bool SDCardManager::compareByTimestamp() {
+int SDCardManager::compareByTimestamp() {
   // Open both files
   File sdFile = SD.open(CONFIG_FILENAME, FILE_READ);
   File spiffsFile = SPIFFS.open(CONFIG_FILENAME, FILE_READ);
@@ -362,7 +364,7 @@ bool SDCardManager::compareByTimestamp() {
     if (sdFile) sdFile.close();
     if (spiffsFile) spiffsFile.close();
     Serial_println("[SDCARD] DEBUG: Could not open files for timestamp comparison");
-    return false; // Indicate we couldn't determine
+    return -1; // Cannot determine
   }
   
   time_t sdTime = getFileModTime(sdFile);
@@ -380,23 +382,28 @@ bool SDCardManager::compareByTimestamp() {
   
   if (!sdTimeValid && !spiffsTimeValid) {
     Serial_println("[SDCARD] DEBUG: Both timestamps invalid, cannot use for comparison");
-    return false; // Indicate we couldn't determine
+    return -1; // Cannot determine
   }
   
   if (!spiffsTimeValid && sdTimeValid) {
     Serial_println("[SDCARD] DEBUG: SPIFFS timestamp invalid, SD is newer");
-    return true;
+    return 1; // SD is newer
   }
   
   if (!sdTimeValid && spiffsTimeValid) {
-    Serial_println("[SDCARD] DEBUG: SD timestamp invalid, SPIFFS is newer");
-    return false;
+    Serial_println("[SDCARD] DEBUG: SD timestamp invalid, SPIFFS is newer/same");
+    return 0; // SD is not newer
   }
   
   // Both timestamps are valid, compare them
-  bool isNewer = sdTime > spiffsTime;
-  Serial_printf("[SDCARD] DEBUG: Timestamp comparison: SD is %s\n", isNewer ? "newer" : "older or same");
-  return isNewer;
+  if (sdTime > spiffsTime) {
+    Serial_println("[SDCARD] DEBUG: Timestamp comparison: SD is newer");
+    return 1; // SD is newer
+  } else {
+    Serial_printf("[SDCARD] DEBUG: Timestamp comparison: SD is %s\n", 
+                 sdTime == spiffsTime ? "same age" : "older");
+    return 0; // SD is not newer
+  }
 }
 
 bool SDCardManager::isForceSyncEnabled() {
