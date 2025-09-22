@@ -39,7 +39,8 @@ public:
   uint32_t calculateFileHash(File& file);
   
   // New: Compare using timestamps (most reliable when available)
-  bool compareByTimestamp();
+  // Returns: 1 = SD newer, 0 = same/older, -1 = cannot determine
+  int compareByTimestamp();
   
   // New: Check if force sync is enabled
   bool isForceSyncEnabled();
