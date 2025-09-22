@@ -26,7 +26,7 @@ public:
   // Sync configuration from SPIFFS to SD
   bool syncConfigToSD();
   
-  // Check if SD config is newer than SPIFFS
+  // Check if SD config is newer than SPIFFS (improved logic)
   bool isSDConfigNewer();
   
   // Get file modification time
@@ -34,6 +34,15 @@ public:
   
   // Compare file content byte by byte
   bool compareFileContent();
+  
+  // New: Calculate simple hash of file content
+  uint32_t calculateFileHash(File& file);
+  
+  // New: Compare using timestamps (most reliable when available)
+  bool compareByTimestamp();
+  
+  // New: Check if force sync is enabled
+  bool isForceSyncEnabled();
   
   // Copy file from source to destination
   bool copyFile(File& source, File& destination);

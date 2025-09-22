@@ -88,6 +88,9 @@ public:
   static String getHealthCheckUnhealthyPatterns();
   static bool isHealthCheckStrictMode();
   
+  // SD Card Configuration
+  static bool isSdForceSyncEnabled();
+  
   // Debug
   static void printAllConfigs();
   static bool isInitialized() { return initialized; }

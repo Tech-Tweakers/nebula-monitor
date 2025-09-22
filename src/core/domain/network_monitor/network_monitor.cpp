@@ -231,13 +231,14 @@ void NetworkMonitor::scanTarget(int index) {
     Serial_printf("[NETWORK_MONITOR] WARNING: Target %s took %lums (timeout)\n", name, targetDuration);
   }
   
-  // Estratégia inteligente: se travou ou demorou demais, marca como UNKNOWN
+  // Fixed strategy: timeout and failures should be DOWN for proper alerting
   Status newStatus;
   if (latency > 0) {
     newStatus = UP;
   } else if (targetDuration > 11000) {
-    newStatus = UNKNOWN; // Timeout = UNKNOWN (primeira vez no código!)
-    Serial_printf("[NETWORK_MONITOR] Target %s marked as UNKNOWN due to timeout\n", name);
+    // CRITICAL FIX: Timeout should be DOWN to trigger alerts, not UNKNOWN
+    newStatus = DOWN;
+    Serial_printf("[NETWORK_MONITOR] Target %s marked as DOWN due to timeout (%lums)\n", name, targetDuration);
   } else {
     newStatus = DOWN;
   }
