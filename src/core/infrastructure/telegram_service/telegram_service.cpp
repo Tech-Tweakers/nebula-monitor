@@ -210,6 +210,10 @@ String TelegramService::formatAlertMessage(const String& targetName, Status stat
     message += "🟡 <b>Target:</b> " + targetName + "\n";
     message += "📊 <b>Response:</b> " + String(latency) + "ms\n";
     message += "🕐 <b>Detected:</b> " + NTPService::getCurrentDateTime() + "\n\n";
+    message += "⚠️ <b>Possible causes:</b>\n";
+    message += "• DNS resolution timeout\n";
+    message += "• SSL handshake failure\n";
+    message += "• Network instability\n\n";
     message += "🔍 <b>Status unclear, waiting...</b>";
   }
   

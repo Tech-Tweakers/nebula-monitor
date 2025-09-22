@@ -15,15 +15,17 @@ void Alert::updateStatus(Status newStatus, uint16_t latency) {
     lastStatus = currentStatus;
     currentStatus = newStatus;
     
-    if (newStatus == DOWN) {
-      // Target went down
+    if (newStatus == DOWN || newStatus == UNKNOWN) {
+      // Target went down or became unknown (both are failures)
       failureCount++;
       if (failureCount == 1) {
         firstFailureTime = millis();
-        Serial_printf("[ALERT] %s: Downtime started\n", targetName.c_str());
+        Serial_printf("[ALERT] %s: Downtime started (status: %s)\n", targetName.c_str(), 
+                     newStatus == DOWN ? "DOWN" : "UNKNOWN");
       }
-      Serial_printf("[ALERT] %s: Failure #%d\n", targetName.c_str(), failureCount);
-    } else if (newStatus == UP && lastStatus == DOWN) {
+      Serial_printf("[ALERT] %s: Failure #%d (status: %s)\n", targetName.c_str(), failureCount,
+                   newStatus == DOWN ? "DOWN" : "UNKNOWN");
+    } else if (newStatus == UP && (lastStatus == DOWN || lastStatus == UNKNOWN)) {
       // Recovery detected
       Serial_printf("[ALERT] %s: Recovery detected\n", targetName.c_str());
       if (alertSent) {
@@ -35,15 +37,17 @@ void Alert::updateStatus(Status newStatus, uint16_t latency) {
         Serial_printf("[ALERT] %s: Quick recovery - resetting downtime tracking\n", targetName.c_str());
       }
     }
-  } else if (newStatus == DOWN) {
-    // Continuous failure
+  } else if (newStatus == DOWN || newStatus == UNKNOWN) {
+    // Continuous failure (DOWN or UNKNOWN)
     failureCount++;
-    Serial_printf("[ALERT] %s: Continuous failure #%d\n", targetName.c_str(), failureCount);
+    Serial_printf("[ALERT] %s: Continuous failure #%d (status: %s)\n", targetName.c_str(), failureCount,
+                 newStatus == DOWN ? "DOWN" : "UNKNOWN");
   }
 }
 
 bool Alert::shouldSendAlert() const {
-  if (currentStatus != DOWN) return false;
+  // CRITICAL FIX: Alert on both DOWN and UNKNOWN status
+  if (currentStatus != DOWN && currentStatus != UNKNOWN) return false;
   if (failureCount < MAX_FAILURES_BEFORE_ALERT) return false;
   
   // Check cooldown - allow re-sending after cooldown period

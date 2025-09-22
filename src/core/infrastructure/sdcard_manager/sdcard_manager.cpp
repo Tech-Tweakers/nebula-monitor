@@ -1,5 +1,6 @@
 #include "sdcard_manager.h"
 #include "core/infrastructure/logger/logger.h"
+#include "config/config_loader/config_loader.h"
 
 // Static member definitions
 const char* SDCardManager::CONFIG_FILENAME = "/config.env";
@@ -152,6 +153,12 @@ bool SDCardManager::isSDConfigNewer() {
     return false;
   }
   
+  // Check if force sync is enabled
+  if (isForceSyncEnabled()) {
+    Serial_println("[SDCARD] DEBUG: Force sync enabled, treating SD as newer");
+    return true;
+  }
+  
   // Open SD file
   File sdFile = SD.open(CONFIG_FILENAME, FILE_READ);
   if (!sdFile) {
@@ -167,28 +174,65 @@ bool SDCardManager::isSDConfigNewer() {
     return true; // SD exists but SPIFFS doesn't
   }
   
-  // Compare file sizes first (quick check)
-  size_t sdSize = sdFile.size();
-  size_t spiffsSize = spiffsFile.size();
-  
-  Serial_printf("[SDCARD] DEBUG: File sizes - SD=%d, SPIFFS=%d\n", sdSize, spiffsSize);
-  
   sdFile.close();
   spiffsFile.close();
   
-  // If sizes are different, assume SD is newer if it's larger
-  if (sdSize != spiffsSize) {
-    Serial_printf("[SDCARD] Size difference: SD=%d, SPIFFS=%d\n", sdSize, spiffsSize);
-    bool isNewer = sdSize > spiffsSize;
-    Serial_printf("[SDCARD] DEBUG: SD is %s based on size\n", isNewer ? "newer" : "older");
-    return isNewer;
+  // Strategy 1: Try timestamp comparison (most reliable when NTP is working)
+  bool timestampResult = compareByTimestamp();
+  if (timestampResult != false) { // If we got a definitive result
+    Serial_println("[SDCARD] DEBUG: Using timestamp comparison result");
+    return timestampResult;
   }
   
-  // If sizes are the same, compare content hash
-  Serial_println("[SDCARD] DEBUG: Same size, comparing content...");
-  bool isNewer = compareFileContent();
-  Serial_printf("[SDCARD] DEBUG: SD is %s based on content\n", isNewer ? "newer" : "older");
-  return isNewer;
+  // Strategy 2: Compare content hashes (more reliable than size)
+  Serial_println("[SDCARD] DEBUG: Timestamps unreliable, comparing content hashes...");
+  
+  sdFile = SD.open(CONFIG_FILENAME, FILE_READ);
+  spiffsFile = SPIFFS.open(CONFIG_FILENAME, FILE_READ);
+  
+  if (sdFile && spiffsFile) {
+    uint32_t sdHash = calculateFileHash(sdFile);
+    uint32_t spiffsHash = calculateFileHash(spiffsFile);
+    
+    Serial_printf("[SDCARD] DEBUG: Hash comparison - SD=0x%08X, SPIFFS=0x%08X\n", sdHash, spiffsHash);
+    
+    sdFile.close();
+    spiffsFile.close();
+    
+    if (sdHash != spiffsHash) {
+      Serial_println("[SDCARD] DEBUG: Content differs, SD is newer");
+      return true;
+    }
+    
+    Serial_println("[SDCARD] DEBUG: Content identical, no sync needed");
+    return false;
+  }
+  
+  // Strategy 3: Fallback to size comparison (but treat ANY difference as "newer")
+  Serial_println("[SDCARD] DEBUG: Hash comparison failed, using size fallback...");
+  
+  sdFile = SD.open(CONFIG_FILENAME, FILE_READ);
+  spiffsFile = SPIFFS.open(CONFIG_FILENAME, FILE_READ);
+  
+  if (sdFile && spiffsFile) {
+    size_t sdSize = sdFile.size();
+    size_t spiffsSize = spiffsFile.size();
+    
+    Serial_printf("[SDCARD] DEBUG: File sizes - SD=%d, SPIFFS=%d\n", sdSize, spiffsSize);
+    
+    sdFile.close();
+    spiffsFile.close();
+    
+    // NEW LOGIC: Any size difference means SD is newer (fixes the original bug)
+    if (sdSize != spiffsSize) {
+      Serial_printf("[SDCARD] Size difference detected: SD=%d, SPIFFS=%d\n", sdSize, spiffsSize);
+      Serial_println("[SDCARD] DEBUG: SD is newer (any size difference counts)");
+      return true;
+    }
+  }
+  
+  Serial_println("[SDCARD] DEBUG: All comparisons suggest files are identical");
+  return false;
 }
 
 bool SDCardManager::compareFileContent() {
@@ -288,6 +332,80 @@ bool SDCardManager::copyFile(File& source, File& destination) {
   
   Serial_printf("[SDCARD] Copied %d bytes from source to destination\n", bytesWritten);
   return bytesWritten > 0;
+}
+
+uint32_t SDCardManager::calculateFileHash(File& file) {
+  if (!file) return 0;
+  
+  // Simple hash function (CRC32-like)
+  uint32_t hash = 0;
+  uint8_t buffer[64];
+  file.seek(0); // Reset to beginning
+  
+  while (file.available()) {
+    size_t bytesRead = file.read(buffer, sizeof(buffer));
+    for (size_t i = 0; i < bytesRead; i++) {
+      hash = hash * 31 + buffer[i]; // Simple polynomial hash
+    }
+  }
+  
+  file.seek(0); // Reset to beginning for caller
+  return hash;
+}
+
+bool SDCardManager::compareByTimestamp() {
+  // Open both files
+  File sdFile = SD.open(CONFIG_FILENAME, FILE_READ);
+  File spiffsFile = SPIFFS.open(CONFIG_FILENAME, FILE_READ);
+  
+  if (!sdFile || !spiffsFile) {
+    if (sdFile) sdFile.close();
+    if (spiffsFile) spiffsFile.close();
+    Serial_println("[SDCARD] DEBUG: Could not open files for timestamp comparison");
+    return false; // Indicate we couldn't determine
+  }
+  
+  time_t sdTime = getFileModTime(sdFile);
+  time_t spiffsTime = getFileModTime(spiffsFile);
+  
+  sdFile.close();
+  spiffsFile.close();
+  
+  Serial_printf("[SDCARD] DEBUG: Timestamps - SD=%lu, SPIFFS=%lu\n", sdTime, spiffsTime);
+  
+  // Check if timestamps are valid (after year 2020)
+  const time_t year2020 = 1577836800; // Jan 1, 2020 00:00:00 UTC
+  bool sdTimeValid = sdTime > year2020;
+  bool spiffsTimeValid = spiffsTime > year2020;
+  
+  if (!sdTimeValid && !spiffsTimeValid) {
+    Serial_println("[SDCARD] DEBUG: Both timestamps invalid, cannot use for comparison");
+    return false; // Indicate we couldn't determine
+  }
+  
+  if (!spiffsTimeValid && sdTimeValid) {
+    Serial_println("[SDCARD] DEBUG: SPIFFS timestamp invalid, SD is newer");
+    return true;
+  }
+  
+  if (!sdTimeValid && spiffsTimeValid) {
+    Serial_println("[SDCARD] DEBUG: SD timestamp invalid, SPIFFS is newer");
+    return false;
+  }
+  
+  // Both timestamps are valid, compare them
+  bool isNewer = sdTime > spiffsTime;
+  Serial_printf("[SDCARD] DEBUG: Timestamp comparison: SD is %s\n", isNewer ? "newer" : "older or same");
+  return isNewer;
+}
+
+bool SDCardManager::isForceSyncEnabled() {
+  // Check if ConfigLoader is available and initialized
+  if (!ConfigLoader::isInitialized()) {
+    return false; // Safe default when config is not loaded yet
+  }
+  
+  return ConfigLoader::isSdForceSyncEnabled();
 }
 
 void SDCardManager::cleanup() {

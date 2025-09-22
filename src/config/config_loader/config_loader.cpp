@@ -364,6 +364,12 @@ bool ConfigLoader::isHealthCheckStrictMode() {
   return value.equalsIgnoreCase("true");
 }
 
+// SD Card Configuration
+bool ConfigLoader::isSdForceSyncEnabled() {
+  String value = getValue("SD_FORCE_SYNC", "false");
+  return value.equalsIgnoreCase("true");
+}
+
 void ConfigLoader::printAllConfigs() {
   Serial.println("=== All Configuration Settings ===");
   for (int i = 0; i < configCount; i++) {
