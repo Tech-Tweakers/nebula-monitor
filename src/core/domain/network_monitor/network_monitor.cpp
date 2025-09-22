@@ -6,12 +6,14 @@
 
 NetworkMonitor::NetworkMonitor() 
   : wifiService(nullptr), httpClient(nullptr), telegramService(nullptr),
-    displayManager(nullptr), taskManager(nullptr), targetCount(0), 
-    scanning(false), lastScanTime(0), scanInterval(30000), initialized(false) {
+    displayManager(nullptr), taskManager(nullptr), targets(nullptr), 
+    targetCount(0), maxTargets(0), scanning(false), lastScanTime(0), 
+    scanInterval(30000), initialized(false) {
 }
 
 NetworkMonitor::~NetworkMonitor() {
-  // Dependencies are managed externally
+  // Clean up dynamic memory
+  deallocateTargets();
 }
 
 bool NetworkMonitor::initialize() {
@@ -143,19 +145,41 @@ void NetworkMonitor::stopScanning() {
 }
 
 bool NetworkMonitor::loadTargets() {
-  targetCount = ConfigLoader::getTargetCount();
+  // First allocate memory for targets
+  if (!allocateTargets()) {
+    Serial_println("[NETWORK_MONITOR] ERROR: Failed to allocate targets");
+    return false;
+  }
   
-  if (targetCount == 0) {
+  // Get target count from configuration
+  int configTargetCount = ConfigLoader::getTargetCount();
+  
+  if (configTargetCount == 0) {
     Serial_println("[NETWORK_MONITOR] No targets configured, using defaults");
-    // Set up default targets
-    targetCount = 6;
-    targets[0] = Target("Proxmox HV", "http://192.168.1.128:8006/", "", PING);
-    targets[1] = Target("Router #1", "http://192.168.1.1", "", PING);
-    targets[2] = Target("Router #2", "https://192.168.1.172", "", PING);
-    targets[3] = Target("Polaris API", "https://pet-chem-independence-australia.trycloudflare.com", "/health", HEALTH_CHECK);
-    targets[4] = Target("Polaris INT", "http://ebfc52323306.ngrok-free.app", "/health", PING);
-    targets[5] = Target("Polaris WEB", "https://tech-tweakers.github.io/polaris-v2-web", "", PING);
+    // Set up default targets (limited by maxTargets)
+    targetCount = min(6, maxTargets);
+    
+    if (targetCount >= 1) targets[0] = Target("Proxmox HV", "http://192.168.1.128:8006/", "", PING);
+    if (targetCount >= 2) targets[1] = Target("Router #1", "http://192.168.1.1", "", PING);
+    if (targetCount >= 3) targets[2] = Target("Router #2", "https://192.168.1.172", "", PING);
+    if (targetCount >= 4) targets[3] = Target("Polaris API", "https://pet-chem-independence-australia.trycloudflare.com", "/health", HEALTH_CHECK);
+    if (targetCount >= 5) targets[4] = Target("Polaris INT", "http://ebfc52323306.ngrok-free.app", "/health", PING);
+    if (targetCount >= 6) targets[5] = Target("Polaris WEB", "https://tech-tweakers.github.io/polaris-v2-web", "", PING);
+    
+    // Initialize remaining targets as empty
+    for (int i = targetCount; i < maxTargets; i++) {
+      targets[i] = Target();
+    }
+    
     return true;
+  }
+  
+  // Limit target count to maximum available
+  targetCount = min(configTargetCount, maxTargets);
+  
+  if (configTargetCount > maxTargets) {
+    Serial_printf("[NETWORK_MONITOR] WARNING: Config has %d targets, but only %d can be loaded\n", 
+                 configTargetCount, maxTargets);
   }
   
   // Load targets from configuration
@@ -177,6 +201,12 @@ bool NetworkMonitor::loadTargets() {
                  monitorTypeStr.c_str());
   }
   
+  // Initialize remaining targets as empty
+  for (int i = targetCount; i < maxTargets; i++) {
+    targets[i] = Target();
+  }
+  
+  Serial_printf("[NETWORK_MONITOR] Loaded %d targets (max: %d)\n", targetCount, maxTargets);
   return true;
 }
 
@@ -390,4 +420,45 @@ void NetworkMonitor::forceStopScan() {
   if (displayManager) {
     displayManager->onScanCompleted();
   }
+}
+
+bool NetworkMonitor::allocateTargets() {
+  // Clean up existing allocation
+  deallocateTargets();
+  
+  // Get configuration
+  TargetConfig& config = TargetConfig::getInstance();
+  if (!config.initialize()) {
+    Serial_println("[NETWORK_MONITOR] ERROR: Failed to initialize target config");
+    return false;
+  }
+  
+  // Get maximum targets from config
+  maxTargets = config.getMaxTargets();
+  
+  // Allocate memory for targets
+  targets = new Target[maxTargets];
+  if (!targets) {
+    Serial_println("[NETWORK_MONITOR] ERROR: Failed to allocate memory for targets");
+    maxTargets = 0;
+    return false;
+  }
+  
+  // Initialize targets
+  for (int i = 0; i < maxTargets; i++) {
+    targets[i] = Target();
+  }
+  
+  Serial_printf("[NETWORK_MONITOR] Allocated %d targets (max: %d)\n", targetCount, maxTargets);
+  return true;
+}
+
+void NetworkMonitor::deallocateTargets() {
+  if (targets) {
+    delete[] targets;
+    targets = nullptr;
+  }
+  targetCount = 0;
+  maxTargets = 0;
+  Serial_println("[NETWORK_MONITOR] Deallocated targets");
 }

@@ -1,6 +1,8 @@
 #pragma once
 #include "core/domain/target/target.h"
 #include "core/domain/alert/alert.h"
+#include "core/domain/config/constants.h"
+#include "core/domain/config/target_config.h"
 #include "core/infrastructure/wifi_service/wifi_service.h"
 #include "core/infrastructure/http_client/http_client.h"
 #include "core/infrastructure/telegram_service/telegram_service.h"
@@ -18,8 +20,9 @@ private:
   TaskManager* taskManager;
   
   // State
-  Target targets[10];
+  Target* targets;
   int targetCount;
+  int maxTargets;
   bool scanning;
   unsigned long lastScanTime;
   unsigned long scanInterval;
@@ -45,12 +48,15 @@ public:
   
   // Target management
   bool loadTargets();
+  bool allocateTargets();
+  void deallocateTargets();
   void scanTarget(int index);
   void updateTargetStatus(int index, Status status, uint16_t latency);
   uint16_t performSafeHealthCheck(const String& url, const String& endpoint, uint16_t timeout = 10000);
   
   // Getters
   int getTargetCount() const { return targetCount; }
+  int getMaxTargets() const { return maxTargets; }
   Target* getTargets() { return targets; }
   bool isScanning() const { return scanning; }
   bool isInitialized() const { return initialized; }

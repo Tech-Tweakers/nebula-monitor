@@ -1,4 +1,5 @@
 #include "config/config_loader/config_loader.h"
+// Removed constants include - no longer needed for tab names
 #include "core/infrastructure/logger/logger_interface.h"
 
 // Static member definitions
@@ -363,6 +364,9 @@ bool ConfigLoader::isHealthCheckStrictMode() {
   String value = getValue("HEALTH_CHECK_STRICT_MODE", "false");
   return value.equalsIgnoreCase("true");
 }
+
+// Tab Configuration - Fixed names: Menu 1, Menu 2, Menu 3
+// No implementation needed - names are hardcoded in DisplayManager
 
 void ConfigLoader::printAllConfigs() {
   Serial.println("=== All Configuration Settings ===");

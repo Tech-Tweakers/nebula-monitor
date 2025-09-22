@@ -52,6 +52,8 @@ public:
   static int getDisplayRotation();
   static int getBacklightPin();
   
+    // Tab Configuration - Fixed names: Menu 1, Menu 2, Menu 3
+  
   // Touch Configuration
   static int getTouchSckPin();
   static int getTouchMosiPin();

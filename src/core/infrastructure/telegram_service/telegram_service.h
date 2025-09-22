@@ -1,5 +1,6 @@
 #pragma once
 #include "core/domain/alert/alert.h"
+#include "core/domain/config/constants.h"
 #include "core/infrastructure/ssl_mutex_manager/ssl_mutex_manager.h"
 #include "core/infrastructure/ntp_service/ntp_service.h"
 #include <Arduino.h>
@@ -10,11 +11,12 @@ private:
   String chatId;
   bool enabled;
   bool sendingMessage;
-  Alert* alerts[6]; // Array of alert objects
+  Alert** alerts; // Dynamic array of alert objects
+  int maxTargets;
   
   // Reply thread management
-  uint32_t lastMessageIds[6]; // message_id por target para reply
-  bool isThreadActive[6];     // thread ativa por target
+  uint32_t* lastMessageIds; // message_id por target para reply
+  bool* isThreadActive;     // thread ativa por target
   
   // Configuration
   static const uint8_t MAX_FAILURES_BEFORE_ALERT = 3;
@@ -27,6 +29,8 @@ public:
   
   // Initialization
   bool initialize(const String& botToken, const String& chatId, bool enabled = true);
+  bool allocateArrays(int maxTargets);
+  void deallocateArrays();
   
   // Alert management
   void updateTargetStatus(int targetIndex, Status newStatus, uint16_t latency, const String& targetName);

@@ -7,23 +7,13 @@
 #include <ArduinoJson.h>
 #include "core/infrastructure/logger/logger.h"
 
-TelegramService::TelegramService() : enabled(false), sendingMessage(false) {
-  // Initialize alert array
-  for (int i = 0; i < 6; i++) {
-    alerts[i] = nullptr;
-    lastMessageIds[i] = 0;
-    isThreadActive[i] = false;
-  }
+TelegramService::TelegramService() : enabled(false), sendingMessage(false), 
+    alerts(nullptr), maxTargets(0), lastMessageIds(nullptr), isThreadActive(nullptr) {
 }
 
 TelegramService::~TelegramService() {
-  // Clean up alert objects
-  for (int i = 0; i < 6; i++) {
-    if (alerts[i]) {
-      delete alerts[i];
-      alerts[i] = nullptr;
-    }
-  }
+  // Clean up dynamic arrays
+  deallocateArrays();
 }
 
 bool TelegramService::initialize(const String& botToken, const String& chatId, bool enabled) {

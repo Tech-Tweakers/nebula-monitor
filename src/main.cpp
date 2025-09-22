@@ -162,8 +162,8 @@ void setup() {
     return;
   }
   
-  // Set targets for display
-  displayManager->setTargets(networkMonitor->getTargets(), networkMonitor->getTargetCount());
+  // Set targets for display with max targets info
+  displayManager->setTargets(networkMonitor->getTargets(), networkMonitor->getTargetCount(), networkMonitor->getMaxTargets());
   
   // Send test message with targets if Telegram is active and targets are loaded
   if (telegramService->isActive()) {

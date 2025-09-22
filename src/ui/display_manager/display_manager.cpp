@@ -1,24 +1,28 @@
 #include "ui/display_manager/display_manager.h"
 #include "ui/touch_handler/touch_handler.h"
 #include "ui/led_controller/led_controller.h"
+// Removed ConfigLoader include - using fixed tab names
 #include <Arduino.h>
 #include <WiFi.h>
 #include "core/infrastructure/logger/logger.h"
 
 DisplayManager::DisplayManager() 
-  : main_screen(nullptr), title_label(nullptr), footer(nullptr), footer_label(nullptr),
-    initialized(false), footer_mode(0), last_uptime_update(0), targets(nullptr), targetCount(0) {
+  : main_screen(nullptr), title_label(nullptr), status_labels(nullptr), 
+    name_labels(nullptr), latency_labels(nullptr), footer(nullptr), footer_label(nullptr),
+    initialized(false), footer_mode(0), last_uptime_update(0), 
+    targets(nullptr), targetCount(0), maxTargets(0), currentTab(0), totalTabs(0),
+    tab_container(nullptr) {
   
-  // Initialize status arrays
-  for (int i = 0; i < 6; i++) {
-    status_labels[i] = nullptr;
-    name_labels[i] = nullptr;
-    latency_labels[i] = nullptr;
+  // Initialize tab arrays
+  for (int i = 0; i < MAX_TABS; i++) {
+    tab_buttons[i] = nullptr;
+    tab_content[i] = nullptr;
   }
 }
 
 DisplayManager::~DisplayManager() {
-  // LVGL objects are cleaned up automatically
+  // Clean up dynamic arrays
+  deallocateUIArrays();
 }
 
 bool DisplayManager::initialize() {
@@ -44,12 +48,24 @@ bool DisplayManager::initialize() {
   return true;
 }
 
-void DisplayManager::setTargets(Target* targets, int count) {
+void DisplayManager::setTargets(Target* targets, int count, int maxCount) {
   this->targets = targets;
   this->targetCount = count;
+  this->maxTargets = maxCount;
   
-  // Update status items if already created
+  // Calculate number of tabs needed
+  totalTabs = (count + TARGETS_PER_TAB - 1) / TARGETS_PER_TAB; // Ceiling division
+  if (totalTabs > MAX_TABS) totalTabs = MAX_TABS;
+  
+  // Allocate UI arrays for the new target count
+  if (!allocateUIArrays()) {
+    Serial_println("[DISPLAY] ERROR: Failed to allocate UI arrays");
+    return;
+  }
+  
+  // Update UI if already created
   if (initialized) {
+    createTabSystem();
     createStatusItems();
   }
 }
@@ -126,18 +142,8 @@ void DisplayManager::createMainScreen() {
   lv_obj_set_style_text_color(title_label, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
   lv_obj_center(title_label);
   
-  // Create main form container
-  lv_obj_t* main_form = lv_obj_create(main_screen);
-  lv_obj_set_size(main_form, 220, 220);
-  lv_obj_set_pos(main_form, 10, 50);
-  lv_obj_set_style_bg_color(main_form, lv_color_hex(0x222222), LV_PART_MAIN);
-  lv_obj_set_style_border_width(main_form, 0, LV_PART_MAIN);
-  lv_obj_set_style_radius(main_form, 8, LV_PART_MAIN);
-  lv_obj_set_style_pad_all(main_form, 10, LV_PART_MAIN);
-  
-  // Enable flex layout
-  lv_obj_set_flex_flow(main_form, LV_FLEX_FLOW_COLUMN);
-  lv_obj_set_flex_align(main_form, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+  // Create tab system
+  createTabSystem();
   
   // Create status items
   createStatusItems();
@@ -166,7 +172,7 @@ void DisplayManager::createStatusItems() {
   }
   
   // Create status items for each target
-  for (int i = 0; i < targetCount && i < 6; i++) {
+  for (int i = 0; i < targetCount && i < maxTargets; i++) {
     Serial_printf("[DISPLAY] Creating status item %d for target: %s\n", i, targets[i].getName().c_str());
     
     // Status item container
@@ -264,8 +270,23 @@ void DisplayManager::handleTouch() {
       return;
     }
     
-    // Check status item touches
-    for (int i = 0; i < targetCount && i < 6; i++) {
+    // Check tab button touches
+    for (int i = 0; i < totalTabs; i++) {
+      if (tab_buttons[i]) {
+        lv_area_t btn_area;
+        lv_obj_get_coords(tab_buttons[i], &btn_area);
+        if (x >= btn_area.x1 && x < btn_area.x2 && y >= btn_area.y1 && y < btn_area.y2) {
+          switchToTab(i);
+          return;
+        }
+      }
+    }
+    
+    // Check status item touches (only for current tab)
+    int startIndex = currentTab * TARGETS_PER_TAB;
+    int endIndex = min(startIndex + TARGETS_PER_TAB, targetCount);
+    
+    for (int i = startIndex; i < endIndex; i++) {
       if (status_labels[i]) {
         lv_area_t item_area;
         lv_obj_get_coords(status_labels[i], &item_area);
@@ -292,7 +313,7 @@ void DisplayManager::updateStatusItem(int index) {
   if (index < 0 || index >= targetCount || !targets) return;
   
   // Additional safety checks
-  if (index >= 6) return;
+  if (index >= maxTargets) return;
   
   Target& target = targets[index];
   
@@ -328,7 +349,7 @@ void DisplayManager::updateStatusItem(int index) {
 }
 
 void DisplayManager::setStatusItemColor(int index, Status status, uint16_t latency) {
-  if (index < 0 || index >= 6 || !status_labels[index]) return;
+  if (index < 0 || index >= maxTargets || !status_labels[index]) return;
   
   // Additional safety check
   if (!lv_obj_is_valid(status_labels[index])) return;
@@ -407,5 +428,200 @@ String DisplayManager::getFooterText() const {
     }
     default:
       return "Unknown mode";
+  }
+}
+
+bool DisplayManager::allocateUIArrays() {
+  // Clean up existing arrays
+  deallocateUIArrays();
+  
+  if (maxTargets <= 0) {
+    Serial_println("[DISPLAY] ERROR: Invalid maxTargets for UI allocation");
+    return false;
+  }
+  
+  // Allocate arrays for UI elements
+  status_labels = new lv_obj_t*[maxTargets];
+  name_labels = new lv_obj_t*[maxTargets];
+  latency_labels = new lv_obj_t*[maxTargets];
+  
+  if (!status_labels || !name_labels || !latency_labels) {
+    Serial_println("[DISPLAY] ERROR: Failed to allocate UI arrays");
+    deallocateUIArrays();
+    return false;
+  }
+  
+  // Initialize arrays
+  for (int i = 0; i < maxTargets; i++) {
+    status_labels[i] = nullptr;
+    name_labels[i] = nullptr;
+    latency_labels[i] = nullptr;
+  }
+  
+  Serial_printf("[DISPLAY] Allocated UI arrays for %d targets\n", maxTargets);
+  return true;
+}
+
+void DisplayManager::deallocateUIArrays() {
+  if (status_labels) {
+    delete[] status_labels;
+    status_labels = nullptr;
+  }
+  if (name_labels) {
+    delete[] name_labels;
+    name_labels = nullptr;
+  }
+  if (latency_labels) {
+    delete[] latency_labels;
+    latency_labels = nullptr;
+  }
+  Serial_println("[DISPLAY] Deallocated UI arrays");
+}
+
+void DisplayManager::createTabSystem() {
+  if (totalTabs <= 0) {
+    Serial_println("[DISPLAY] No tabs to create");
+    return;
+  }
+  
+  // Create tab container
+  tab_container = lv_obj_create(main_screen);
+  lv_obj_set_size(tab_container, 220, 220);
+  lv_obj_set_pos(tab_container, 10, 50);
+  lv_obj_set_style_bg_color(tab_container, lv_color_hex(0x222222), LV_PART_MAIN);
+  lv_obj_set_style_border_width(tab_container, 0, LV_PART_MAIN);
+  lv_obj_set_style_radius(tab_container, 8, LV_PART_MAIN);
+  lv_obj_set_style_pad_all(tab_container, 5, LV_PART_MAIN);
+  
+  // Create tab buttons
+  for (int i = 0; i < totalTabs; i++) {
+    // Fixed tab names: Menu 1, Menu 2, Menu 3
+    String tabName = "Menu " + String(i + 1);
+    
+    tab_buttons[i] = lv_btn_create(tab_container);
+    lv_obj_set_size(tab_buttons[i], 60, 25);
+    lv_obj_set_pos(tab_buttons[i], i * 70, 0);
+    
+    // Set button style
+    if (i == currentTab) {
+      lv_obj_set_style_bg_color(tab_buttons[i], lv_color_hex(0x4CAF50), LV_PART_MAIN);
+    } else {
+      lv_obj_set_style_bg_color(tab_buttons[i], lv_color_hex(0x555555), LV_PART_MAIN);
+    }
+    
+    // Create button label
+    lv_obj_t* btn_label = lv_label_create(tab_buttons[i]);
+    lv_label_set_text(btn_label, tabName.c_str());
+    lv_obj_set_style_text_color(btn_label, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+    lv_obj_center(btn_label);
+    
+    // Create tab content
+    createTabContent(i);
+  }
+  
+  Serial_printf("[DISPLAY] Created %d tabs\n", totalTabs);
+}
+
+void DisplayManager::createTabContent(int tabIndex) {
+  if (tabIndex < 0 || tabIndex >= totalTabs) return;
+  
+  // Create content container for this tab
+  tab_content[tabIndex] = lv_obj_create(tab_container);
+  lv_obj_set_size(tab_content[tabIndex], 210, 180);
+  lv_obj_set_pos(tab_content[tabIndex], 5, 35);
+  lv_obj_set_style_bg_color(tab_content[tabIndex], lv_color_hex(0x111111), LV_PART_MAIN);
+  lv_obj_set_style_border_width(tab_content[tabIndex], 0, LV_PART_MAIN);
+  lv_obj_set_style_radius(tab_content[tabIndex], 6, LV_PART_MAIN);
+  lv_obj_set_style_pad_all(tab_content[tabIndex], 8, LV_PART_MAIN);
+  
+  // Enable flex layout
+  lv_obj_set_flex_flow(tab_content[tabIndex], LV_FLEX_FLOW_COLUMN);
+  lv_obj_set_flex_align(tab_content[tabIndex], LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+  lv_obj_set_style_pad_gap(tab_content[tabIndex], 4, LV_PART_MAIN);
+  
+  // Show/hide based on current tab
+  if (tabIndex != currentTab) {
+    lv_obj_add_flag(tab_content[tabIndex], LV_OBJ_FLAG_HIDDEN);
+  }
+  
+  // Create status items for this tab's targets
+  int startIndex = tabIndex * TARGETS_PER_TAB;
+  int endIndex = min(startIndex + TARGETS_PER_TAB, targetCount);
+  
+  for (int i = startIndex; i < endIndex; i++) {
+    Serial_printf("[DISPLAY] Creating status item %d for target: %s (Tab %d)\n", 
+                 i, targets[i].getName().c_str(), tabIndex + 1);
+    
+    // Status item container
+    lv_obj_t* status_item = lv_obj_create(tab_content[tabIndex]);
+    lv_obj_set_size(status_item, 190, 24);
+    lv_obj_set_style_bg_color(status_item, lv_color_hex(0x222222), LV_PART_MAIN);
+    lv_obj_set_style_border_width(status_item, 0, LV_PART_MAIN);
+    lv_obj_set_style_radius(status_item, 4, LV_PART_MAIN);
+    lv_obj_set_style_pad_all(status_item, 4, LV_PART_MAIN);
+    
+    // Enable flex layout for the item
+    lv_obj_set_flex_flow(status_item, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(status_item, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+    
+    // Target name label
+    lv_obj_t* name_label = lv_label_create(status_item);
+    lv_label_set_text(name_label, targets[i].getName().c_str());
+    lv_obj_set_style_text_color(name_label, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+    
+    // Latency label
+    lv_obj_t* latency_label = lv_label_create(status_item);
+    lv_label_set_text(latency_label, "--- ms");
+    lv_obj_set_style_text_color(latency_label, lv_color_hex(0xCCCCCC), LV_PART_MAIN);
+    
+    // Store references
+    status_labels[i] = status_item;
+    name_labels[i] = name_label;
+    latency_labels[i] = latency_label;
+    
+    // Set initial status color
+    setStatusItemColor(i, targets[i].getStatus(), targets[i].getLatency());
+  }
+}
+
+void DisplayManager::switchToTab(int tabIndex) {
+  if (tabIndex < 0 || tabIndex >= totalTabs) return;
+  
+  // Hide current tab content
+  if (tab_content[currentTab]) {
+    lv_obj_add_flag(tab_content[currentTab], LV_OBJ_FLAG_HIDDEN);
+  }
+  
+  // Update button styles
+  if (tab_buttons[currentTab]) {
+    lv_obj_set_style_bg_color(tab_buttons[currentTab], lv_color_hex(0x555555), LV_PART_MAIN);
+  }
+  
+  // Switch to new tab
+  currentTab = tabIndex;
+  
+  // Show new tab content
+  if (tab_content[currentTab]) {
+    lv_obj_clear_flag(tab_content[currentTab], LV_OBJ_FLAG_HIDDEN);
+  }
+  
+  // Update button style
+  if (tab_buttons[currentTab]) {
+    lv_obj_set_style_bg_color(tab_buttons[currentTab], lv_color_hex(0x4CAF50), LV_PART_MAIN);
+  }
+  
+  Serial_printf("[DISPLAY] Switched to tab %d\n", tabIndex + 1);
+}
+
+void DisplayManager::updateTabButtons() {
+  for (int i = 0; i < totalTabs; i++) {
+    if (tab_buttons[i]) {
+      // Fixed tab names: Menu 1, Menu 2, Menu 3
+      String tabName = "Menu " + String(i + 1);
+      lv_obj_t* btn_label = lv_obj_get_child(tab_buttons[i], 0);
+      if (btn_label) {
+        lv_label_set_text(btn_label, tabName.c_str());
+      }
+    }
   }
 }
