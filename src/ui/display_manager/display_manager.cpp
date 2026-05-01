@@ -7,7 +7,7 @@
 
 DisplayManager::DisplayManager() 
   : main_screen(nullptr), title_label(nullptr), footer(nullptr), footer_label(nullptr),
-    initialized(false), footer_mode(0), last_uptime_update(0), targets(nullptr), targetCount(0) {
+    initialized(false), footer_mode(0), last_uptime_update(0), targets(nullptr), targetCount(0), pending_refresh(false) {
   
   // Initialize status arrays
   for (int i = 0; i < 6; i++) {
@@ -56,10 +56,16 @@ void DisplayManager::setTargets(Target* targets, int count) {
 
 void DisplayManager::update() {
   if (!initialized) return;
-  
+
   // Handle LVGL tasks
   lv_timer_handler();
-  
+
+  // Flush pending touch refresh safely from display task context
+  if (pending_refresh) {
+    pending_refresh = false;
+    lv_refr_now(NULL);
+  }
+
   // Handle touch input
   handleTouch();
   
@@ -122,7 +128,7 @@ void DisplayManager::createMainScreen() {
   
   // Create title label
   title_label = lv_label_create(title_bar);
-  lv_label_set_text(title_label, "Nebula Monitor v2.4");
+  lv_label_set_text(title_label, "Nebula Monitor v2.4.1");
   lv_obj_set_style_text_color(title_label, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
   lv_obj_center(title_label);
   
@@ -232,7 +238,7 @@ void DisplayManager::createFooter() {
 
 void DisplayManager::updateFooter() {
   if (!footer_label) return;
-  
+
   String text = getFooterText();
   lv_label_set_text(footer_label, text.c_str());
   
@@ -255,7 +261,6 @@ void DisplayManager::handleTouch() {
   if (TouchHandler::isTouched()) {
     int16_t x, y;
     TouchHandler::getTouchCoordinates(x, y);
-    
     // Check footer touch
     lv_area_t footer_area;
     lv_obj_get_coords(footer, &footer_area);
@@ -280,6 +285,7 @@ void DisplayManager::handleTouch() {
 
 void DisplayManager::onFooterTouched() {
   cycleFooterMode();
+  pending_refresh = true;
 }
 
 void DisplayManager::onStatusItemTouched(int index) {

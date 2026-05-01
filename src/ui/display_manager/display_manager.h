@@ -20,6 +20,7 @@ private:
   int footer_mode;
   unsigned long last_uptime_update;
   static const unsigned long UPTIME_UPDATE_INTERVAL = 500;
+  volatile bool pending_refresh;
   
   // Target references
   Target* targets;
