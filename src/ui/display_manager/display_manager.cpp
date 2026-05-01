@@ -329,8 +329,7 @@ void DisplayManager::updateStatusItem(int index) {
     lv_obj_invalidate(lv_obj_get_parent(status_labels[index]));
   }
   
-  // Force immediate refresh for critical updates
-  lv_refr_now(NULL);
+  pending_refresh = true;
 }
 
 void DisplayManager::setStatusItemColor(int index, Status status, uint16_t latency) {
