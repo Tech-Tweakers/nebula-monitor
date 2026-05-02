@@ -25,6 +25,9 @@ private:
   // Target references
   Target* targets;
   int targetCount;
+
+  // Detail modal
+  lv_obj_t* detail_modal;
   
 public:
   DisplayManager();
@@ -53,6 +56,10 @@ public:
   void handleTouch();
   void onFooterTouched();
   void onStatusItemTouched(int index);
+
+  // Detail modal
+  void openDetailModal(int index);
+  void closeDetailModal();
   
   // Getters
   bool isInitialized() const { return initialized; }

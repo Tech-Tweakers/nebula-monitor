@@ -7,7 +7,7 @@
 
 DisplayManager::DisplayManager() 
   : main_screen(nullptr), title_label(nullptr), footer(nullptr), footer_label(nullptr),
-    initialized(false), footer_mode(0), last_uptime_update(0), targets(nullptr), targetCount(0), pending_refresh(false) {
+    initialized(false), footer_mode(0), last_uptime_update(0), targets(nullptr), targetCount(0), pending_refresh(false), detail_modal(nullptr) {
   
   // Initialize status arrays
   for (int i = 0; i < 6; i++) {
@@ -258,26 +258,35 @@ void DisplayManager::cycleFooterMode() {
 }
 
 void DisplayManager::handleTouch() {
-  if (TouchHandler::isTouched()) {
-    int16_t x, y;
-    TouchHandler::getTouchCoordinates(x, y);
-    // Check footer touch
-    lv_area_t footer_area;
-    lv_obj_get_coords(footer, &footer_area);
-    if (x >= footer_area.x1 && x < footer_area.x2 && y >= footer_area.y1 && y < footer_area.y2) {
-      onFooterTouched();
-      return;
+  if (!TouchHandler::isTouched()) return;
+
+  int16_t x, y;
+  TouchHandler::getTouchCoordinates(x, y);
+
+  // Modal aberto — checa só o X
+  if (detail_modal) {
+    if (x >= 196 && x <= 232 && y >= 8 && y <= 44) {
+      closeDetailModal();
     }
-    
-    // Check status item touches
-    for (int i = 0; i < targetCount && i < 6; i++) {
-      if (status_labels[i]) {
-        lv_area_t item_area;
-        lv_obj_get_coords(status_labels[i], &item_area);
-        if (x >= item_area.x1 && x < item_area.x2 && y >= item_area.y1 && y < item_area.y2) {
-          onStatusItemTouched(i);
-          break;
-        }
+    return;
+  }
+
+  // Check footer touch
+  lv_area_t footer_area;
+  lv_obj_get_coords(footer, &footer_area);
+  if (x >= footer_area.x1 && x < footer_area.x2 && y >= footer_area.y1 && y < footer_area.y2) {
+    onFooterTouched();
+    return;
+  }
+
+  // Check status item touches
+  for (int i = 0; i < targetCount && i < 6; i++) {
+    if (status_labels[i]) {
+      lv_area_t item_area;
+      lv_obj_get_coords(status_labels[i], &item_area);
+      if (x >= item_area.x1 && x < item_area.x2 && (y + 15) >= item_area.y1 && (y + 15) < item_area.y2) {
+        onStatusItemTouched(i);
+        break;
       }
     }
   }
@@ -290,8 +299,68 @@ void DisplayManager::onFooterTouched() {
 
 void DisplayManager::onStatusItemTouched(int index) {
   if (index < 0 || index >= targetCount) return;
-  
-  // Could show detail window here
+  openDetailModal(index);
+}
+
+void DisplayManager::openDetailModal(int index) {
+  if (detail_modal) closeDetailModal();
+
+  Target& t = targets[index];
+
+  // Overlay escuro cobrindo tudo
+  detail_modal = lv_obj_create(main_screen);
+  lv_obj_set_size(detail_modal, 240, 320);
+  lv_obj_set_pos(detail_modal, 0, 0);
+  lv_obj_set_style_bg_color(detail_modal, lv_color_hex(0x1a1a1a), LV_PART_MAIN);
+  lv_obj_set_style_bg_opa(detail_modal, LV_OPA_90, LV_PART_MAIN);
+  lv_obj_set_style_border_width(detail_modal, 0, LV_PART_MAIN);
+  lv_obj_set_style_radius(detail_modal, 0, LV_PART_MAIN);
+  lv_obj_clear_flag(detail_modal, LV_OBJ_FLAG_SCROLLABLE);
+
+  // Botão X no canto superior direito
+  lv_obj_t* close_btn = lv_btn_create(detail_modal);
+  lv_obj_set_size(close_btn, 36, 36);
+  lv_obj_set_pos(close_btn, 196, 8);
+  lv_obj_set_style_bg_color(close_btn, lv_color_hex(0x444444), LV_PART_MAIN);
+  lv_obj_set_style_radius(close_btn, 18, LV_PART_MAIN);
+  lv_obj_add_event_cb(close_btn, [](lv_event_t* e) {
+    DisplayManager* dm = static_cast<DisplayManager*>(lv_event_get_user_data(e));
+    if (dm) dm->closeDetailModal();
+  }, LV_EVENT_CLICKED, this);
+
+  lv_obj_t* close_label = lv_label_create(close_btn);
+  lv_label_set_text(close_label, "X");
+  lv_obj_center(close_label);
+
+  // Nome do target
+  lv_obj_t* name_label = lv_label_create(detail_modal);
+  lv_label_set_text(name_label, t.getName().c_str());
+  lv_obj_set_style_text_color(name_label, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+  lv_obj_set_pos(name_label, 16, 20);
+
+  // Status
+  lv_obj_t* status_label = lv_label_create(detail_modal);
+  String status_text = "Status: " + String(t.getStatusText());
+  lv_label_set_text(status_label, status_text.c_str());
+  lv_obj_set_style_text_color(status_label, t.isHealthy() ? lv_color_hex(0x00FF88) : lv_color_hex(0xFF4444), LV_PART_MAIN);
+  lv_obj_set_pos(status_label, 16, 60);
+
+  // Latência
+  lv_obj_t* latency_label = lv_label_create(detail_modal);
+  String latency_text = "Latency: " + t.getLatencyText();
+  lv_label_set_text(latency_label, latency_text.c_str());
+  lv_obj_set_style_text_color(latency_label, lv_color_hex(0xCCCCCC), LV_PART_MAIN);
+  lv_obj_set_pos(latency_label, 16, 90);
+
+  pending_refresh = true;
+}
+
+void DisplayManager::closeDetailModal() {
+  if (detail_modal && lv_obj_is_valid(detail_modal)) {
+    lv_obj_del(detail_modal);
+  }
+  detail_modal = nullptr;
+  pending_refresh = true;
 }
 
 void DisplayManager::updateStatusItem(int index) {
