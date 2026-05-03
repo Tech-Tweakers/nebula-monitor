@@ -20,29 +20,32 @@ private:
   int targetCount;
 
   // Layout constants
-  static const int TITLE_H     = 40;
-  static const int ITEM_H      = 34;
-  static const int ITEM_GAP    = 4;
-  static const int ITEM_X      = 8;
-  static const int ITEM_W      = 224;
-  static const int ITEMS_Y     = 48;
-  static const int FOOTER_H    = 30;
-  static const int FOOTER_Y    = 286;
+  static const int TITLE_H     = 44;
+  static const int ITEM_H      = 36;
+  static const int ITEM_GAP    = 5;
+  static const int ITEM_X      = 10;
+  static const int ITEM_W      = 220;
+  static const int ITEMS_Y     = 52;
+  static const int FOOTER_H    = 28;
+  static const int FOOTER_Y    = 288;
+  static const int BAR_W       = 4;   // status bar width
 
-  // Colors
-  static const uint32_t C_BG        = 0x000000;
-  static const uint32_t C_TITLE_BG  = 0x1a1a2e;
-  static const uint32_t C_ITEM_BG   = 0x111111;
-  static const uint32_t C_UP_FAST   = 0x00AA55;
-  static const uint32_t C_UP_SLOW   = 0x0055AA;
-  static const uint32_t C_DOWN      = 0xAA1111;
-  static const uint32_t C_UNKNOWN   = 0x333333;
-  static const uint32_t C_FOOTER_BG = 0x1a1a1a;
-  static const uint32_t C_TEXT      = 0xCCCCCC;
-  static const uint32_t C_WHITE     = 0xFFFFFF;
-  static const uint32_t C_DIM       = 0x666666;
-  static const uint32_t C_MODAL_BG  = 0x0d0d0d;
-  static const uint32_t C_SEP       = 0x2a2a2a;
+  // Palette — RGB values passed to tft->color565(r,g,b) — TFT_eSPI handles BGR
+  // Stored as 0xRRGGBB for use with the RGB macro below
+  static const uint32_t C_BG        = 0x0d1117;
+  static const uint32_t C_TITLE_BG  = 0x161b22;
+  static const uint32_t C_ITEM_BG   = 0x161b22;
+  static const uint32_t C_UP_FAST   = 0x00ff41;
+  static const uint32_t C_UP_SLOW   = 0xffaa00;
+  static const uint32_t C_DOWN      = 0xff4444;
+  static const uint32_t C_UNKNOWN   = 0x444444;
+  static const uint32_t C_FOOTER_BG = 0x161b22;
+  static const uint32_t C_TEXT      = 0xc9d1d9;
+  static const uint32_t C_WHITE     = 0xffffff;
+  static const uint32_t C_DIM       = 0x8b949e;
+  static const uint32_t C_MODAL_BG  = 0x0d1117;
+  static const uint32_t C_SEP       = 0x21262d;
+  static const uint32_t C_ACCENT    = 0x58a6ff;
 
   void drawTitleBar();
   void drawStatusItem(int index);

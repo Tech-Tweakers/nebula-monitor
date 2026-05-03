@@ -243,6 +243,19 @@ HEALTH_CHECK_UNHEALTHY_PATTERNS="status":"unhealthy","status":"down","status":"e
 - 🟠 **Orange**: Target SLOW (slow response/latency)
 - 🔴 **Red**: Target DOWN (unhealthy/no response)
 
+### ⚠️ Display Color Inversion (TFT Hardware Quirk)
+This display requires **bitwise NOT (`~`)** on all color565 values due to `TFT_INVERSION_ON` + `TFT_BGR` combined effect.
+All colors must go through the `c()` helper in `display_manager.cpp`:
+```cpp
+static inline uint16_t c(uint32_t rgb) {
+  uint8_t r = (rgb >> 16) & 0xFF;
+  uint8_t g = (rgb >> 8)  & 0xFF;
+  uint8_t b =  rgb        & 0xFF;
+  return ~tft->color565(r, g, b);
+}
+```
+Pass standard `0xRRGGBB` hex values — the helper handles the inversion automatically.
+
 ### LED Indicator Colors
 - 🔴 **Red Solid**: Alert Active (targets down)
 - 🟢 **Green Solid**: Idle (no alerts, system normal)
