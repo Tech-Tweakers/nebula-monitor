@@ -5,371 +5,163 @@
 #include <WiFi.h>
 #include "core/infrastructure/logger/logger.h"
 
-DisplayManager::DisplayManager() 
-  : main_screen(nullptr), title_label(nullptr), footer(nullptr), footer_label(nullptr),
-    initialized(false), footer_mode(0), last_uptime_update(0), targets(nullptr), targetCount(0), pending_refresh(false), detail_modal(nullptr) {
-  
-  // Initialize status arrays
-  for (int i = 0; i < 6; i++) {
-    status_labels[i] = nullptr;
-    name_labels[i] = nullptr;
-    latency_labels[i] = nullptr;
-  }
-}
-
-DisplayManager::~DisplayManager() {
-  // LVGL objects are cleaned up automatically
-}
+DisplayManager::DisplayManager()
+  : initialized(false), footer_mode(0), last_uptime_update(0),
+    pending_refresh(false), modal_open(false), modal_target_index(-1),
+    targets(nullptr), targetCount(0) {}
 
 bool DisplayManager::initialize() {
   if (initialized) return true;
-  
-  Serial_println("[DISPLAY] Initializing display manager...");
-  
-  // Initialize LVGL (this should be done in main setup)
-  // lv_init() is called in main.cpp
-  
-  // Create main screen
-  createMainScreen();
-  
-  // Initialize touch handler
+  Serial_println("[DISPLAY] Initializing...");
+
   TouchHandler::initialize();
-  
-  // Initialize LED controller
   LEDController::initialize();
-  
+
+  tft->fillScreen(tft->color565(0, 0, 0));
+  drawMainScreen();
+
   initialized = true;
-  Serial_println("[DISPLAY] Display manager initialized successfully!");
-  
+  Serial_println("[DISPLAY] Ready.");
   return true;
 }
 
-void DisplayManager::setTargets(Target* targets, int count) {
-  this->targets = targets;
-  this->targetCount = count;
-  
-  // Update status items if already created
-  if (initialized) {
-    createStatusItems();
-  }
+void DisplayManager::setTargets(Target* t, int count) {
+  targets = t;
+  targetCount = count;
+  if (initialized) drawMainScreen();
 }
 
 void DisplayManager::update() {
   if (!initialized) return;
 
-  // Handle LVGL tasks
-  lv_timer_handler();
-
-  // Flush pending touch refresh safely from display task context
   if (pending_refresh) {
     pending_refresh = false;
-    lv_refr_now(NULL);
+    if (modal_open) drawModal(modal_target_index);
+    else drawMainScreen();
   }
 
-  // Handle touch input
   handleTouch();
-  
-  // Update footer periodically
+
   if (millis() - last_uptime_update >= UPTIME_UPDATE_INTERVAL) {
-    updateFooter();
+    if (!modal_open) drawFooter();
     last_uptime_update = millis();
   }
-  
-  // Update LED status
+
   LEDController::update();
 }
 
 void DisplayManager::updateTargetStatus(int index, Status status, uint16_t latency) {
   if (index < 0 || index >= targetCount || !targets) return;
-  
-  Serial_printf("[DISPLAY] updateTargetStatus called: index=%d, status=%d, latency=%d\n", 
-               index, status, latency);
-  
+  Serial_printf("[DISPLAY] updateTargetStatus: index=%d status=%d latency=%d\n", index, status, latency);
   targets[index].setStatus(status);
   targets[index].setLatency(latency);
-  
-  updateStatusItem(index);
-}
-
-void DisplayManager::onScanStarted() {
-  Serial_println("[DISPLAY] Scan started");
-  LEDController::setStatus(LEDStatus::SCANNING);
-  updateFooter();
-}
-
-void DisplayManager::onScanCompleted() {
-  Serial_println("[DISPLAY] Scan completed");
-  
-  // Determine LED status based on targets
-  bool anyDown = false;
-  for (int i = 0; i < targetCount; i++) {
-    if (targets[i].isDown()) {
-      anyDown = true;
-      break;
-    }
-  }
-  
-  LEDController::setStatus(anyDown ? LEDStatus::TARGETS_DOWN : LEDStatus::SYSTEM_OK);
-  updateFooter();
-}
-
-void DisplayManager::createMainScreen() {
-  // Get main screen
-  main_screen = lv_scr_act();
-  lv_obj_set_style_bg_color(main_screen, lv_color_hex(0x000000), LV_PART_MAIN);
-  
-  // Create title bar
-  lv_obj_t* title_bar = lv_obj_create(main_screen);
-  lv_obj_set_size(title_bar, 240, 40);
-  lv_obj_set_pos(title_bar, 0, 0);
-  lv_obj_set_style_bg_color(title_bar, lv_color_hex(0x2d2d2d), LV_PART_MAIN);
-  lv_obj_set_style_border_width(title_bar, 0, LV_PART_MAIN);
-  lv_obj_set_style_radius(title_bar, 0, LV_PART_MAIN);
-  
-  // Create title label
-  title_label = lv_label_create(title_bar);
-  lv_label_set_text(title_label, "Nebula Monitor v2.4.1");
-  lv_obj_set_style_text_color(title_label, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
-  lv_obj_center(title_label);
-  
-  // Create main form container
-  lv_obj_t* main_form = lv_obj_create(main_screen);
-  lv_obj_set_size(main_form, 220, 220);
-  lv_obj_set_pos(main_form, 10, 50);
-  lv_obj_set_style_bg_color(main_form, lv_color_hex(0x222222), LV_PART_MAIN);
-  lv_obj_set_style_border_width(main_form, 0, LV_PART_MAIN);
-  lv_obj_set_style_radius(main_form, 8, LV_PART_MAIN);
-  lv_obj_set_style_pad_all(main_form, 10, LV_PART_MAIN);
-  
-  // Enable flex layout
-  lv_obj_set_flex_flow(main_form, LV_FLEX_FLOW_COLUMN);
-  lv_obj_set_flex_align(main_form, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-  
-  // Create status items
-  createStatusItems();
-  
-  // Create footer
-  createFooter();
-}
-
-void DisplayManager::createStatusItems() {
-  if (!targets) {
-    Serial_println("[DISPLAY] ERROR: No targets provided!");
-    return;
-  }
-  
-  Serial_printf("[DISPLAY] Creating status items for %d targets\n", targetCount);
-  
-  // Find the main form container (it should be the second child of main_screen)
-  lv_obj_t* main_form = nullptr;
-  if (lv_obj_get_child_cnt(main_screen) >= 2) {
-    main_form = lv_obj_get_child(main_screen, 1); // main_form is the second child (index 1)
-  }
-  
-  if (!main_form) {
-    Serial_println("[DISPLAY] ERROR: Main form not found!");
-    return;
-  }
-  
-  // Create status items for each target
-  for (int i = 0; i < targetCount && i < 6; i++) {
-    Serial_printf("[DISPLAY] Creating status item %d for target: %s\n", i, targets[i].getName().c_str());
-    
-    // Status item container
-    lv_obj_t* status_item = lv_obj_create(main_form);
-    lv_obj_set_size(status_item, 200, 24);
-    lv_obj_set_style_bg_color(status_item, lv_color_hex(0x111111), LV_PART_MAIN);
-    lv_obj_set_style_border_width(status_item, 0, LV_PART_MAIN);
-    lv_obj_set_style_radius(status_item, 6, LV_PART_MAIN);
-    lv_obj_set_style_pad_all(status_item, 4, LV_PART_MAIN);
-    
-    // Enable flex layout for the item
-    lv_obj_set_flex_flow(status_item, LV_FLEX_FLOW_ROW);
-    lv_obj_set_flex_align(status_item, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-    
-    // Target name label
-    lv_obj_t* name_label = lv_label_create(status_item);
-    lv_label_set_text(name_label, targets[i].getName().c_str());
-    lv_obj_set_style_text_color(name_label, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
-    
-    // Latency label
-    lv_obj_t* latency_label = lv_label_create(status_item);
-    lv_label_set_text(latency_label, "--- ms");
-    lv_obj_set_style_text_color(latency_label, lv_color_hex(0xCCCCCC), LV_PART_MAIN);
-    
-    // Store references
-    status_labels[i] = status_item;
-    name_labels[i] = name_label;
-    latency_labels[i] = latency_label;
-    
-    Serial_printf("[DISPLAY] Status item %d created successfully\n", i);
-    
-    // Update initial status
-    updateStatusItem(i);
-  }
-}
-
-void DisplayManager::createFooter() {
-  footer = lv_obj_create(main_screen);
-  lv_obj_set_size(footer, 220, 32);
-  lv_obj_set_pos(footer, 10, 260);
-  lv_obj_set_style_bg_color(footer, lv_color_hex(0x333333), LV_PART_MAIN);
-  lv_obj_set_style_border_width(footer, 0, LV_PART_MAIN);
-  lv_obj_set_style_radius(footer, 6, LV_PART_MAIN);
-  lv_obj_set_style_pad_all(footer, 6, LV_PART_MAIN);
-  
-  // Enable flex layout
-  lv_obj_set_flex_flow(footer, LV_FLEX_FLOW_ROW);
-  lv_obj_set_flex_align(footer, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
-  
-  // Footer label
-  footer_label = lv_label_create(footer);
-  lv_label_set_text(footer_label, "Warming up...");
-  lv_obj_set_style_text_color(footer_label, lv_color_hex(0xCCCCCC), LV_PART_MAIN);
-  lv_obj_set_width(footer_label, LV_PCT(100));
-  lv_obj_set_style_text_align(footer_label, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN);
-  
-  // Make footer clickable
-  lv_obj_add_event_cb(footer, [](lv_event_t* e) {
-    DisplayManager* dm = static_cast<DisplayManager*>(lv_event_get_user_data(e));
-    if (dm) dm->onFooterTouched();
-  }, LV_EVENT_CLICKED, this);
-}
-
-void DisplayManager::updateFooter() {
-  if (!footer_label) return;
-
-  String text = getFooterText();
-  lv_label_set_text(footer_label, text.c_str());
-  
-  // Force a gentle refresh to show changes
-  if (footer && lv_obj_is_valid(footer)) {
-    lv_obj_invalidate(footer);
-    // Also invalidate parent to ensure full refresh
-    lv_obj_invalidate(lv_obj_get_parent(footer));
-    // Force immediate refresh of just the footer area
-    lv_obj_refresh_ext_draw_size(footer);
-  }
-}
-
-void DisplayManager::cycleFooterMode() {
-  footer_mode = (footer_mode + 1) % 3;
-  updateFooter();
-}
-
-void DisplayManager::handleTouch() {
-  if (!TouchHandler::isTouched()) return;
-
-  int16_t x, y;
-  TouchHandler::getTouchCoordinates(x, y);
-
-  // Modal aberto — checa só o X
-  if (detail_modal) {
-    if (x >= 196 && x <= 232 && y >= 8 && y <= 44) {
-      closeDetailModal();
-    }
-    return;
-  }
-
-  // Check footer touch
-  lv_area_t footer_area;
-  lv_obj_get_coords(footer, &footer_area);
-  if (x >= footer_area.x1 && x < footer_area.x2 && y >= footer_area.y1 && y < footer_area.y2) {
-    onFooterTouched();
-    return;
-  }
-
-  // Check status item touches
-  for (int i = 0; i < targetCount && i < 6; i++) {
-    if (status_labels[i]) {
-      lv_area_t item_area;
-      lv_obj_get_coords(status_labels[i], &item_area);
-      if (x >= item_area.x1 && x < item_area.x2 && (y + 15) >= item_area.y1 && (y + 15) < item_area.y2) {
-        onStatusItemTouched(i);
-        break;
-      }
-    }
-  }
-}
-
-void DisplayManager::onFooterTouched() {
-  cycleFooterMode();
   pending_refresh = true;
 }
 
-void DisplayManager::onStatusItemTouched(int index) {
-  if (index < 0 || index >= targetCount) return;
-  openDetailModal(index);
+void DisplayManager::onScanStarted() {
+  LEDController::setStatus(LEDStatus::SCANNING);
 }
 
-void DisplayManager::openDetailModal(int index) {
-  if (detail_modal) closeDetailModal();
+void DisplayManager::onScanCompleted() {
+  bool anyDown = false;
+  for (int i = 0; i < targetCount; i++) {
+    if (targets[i].isDown()) { anyDown = true; break; }
+  }
+  LEDController::setStatus(anyDown ? LEDStatus::TARGETS_DOWN : LEDStatus::SYSTEM_OK);
+  pending_refresh = true;
+}
+
+// ── Drawing ──────────────────────────────────────────────────────────────────
+
+void DisplayManager::drawMainScreen() {
+  tft->fillScreen(tft->color565(0, 0, 0));
+  drawTitleBar();
+  for (int i = 0; i < targetCount && i < 6; i++) drawStatusItem(i);
+  drawFooter();
+}
+
+void DisplayManager::drawTitleBar() {
+  uint16_t bg = tft->color565(0x1a, 0x1a, 0x2e);
+  tft->fillRect(0, 0, 240, TITLE_H, bg);
+  tft->setTextColor(TFT_WHITE, bg);
+  tft->setTextDatum(MC_DATUM);
+  tft->setTextSize(1);
+  tft->drawString("Nebula Monitor v2.4.1", 120, 20, 2);
+}
+
+void DisplayManager::drawStatusItem(int index) {
+  if (!targets || index >= targetCount) return;
 
   Target& t = targets[index];
+  int y = ITEMS_Y + index * (ITEM_H + ITEM_GAP);
 
-  // Overlay opaco cobrindo tudo
-  detail_modal = lv_obj_create(main_screen);
-  lv_obj_set_size(detail_modal, 240, 320);
-  lv_obj_set_pos(detail_modal, 0, 0);
-  lv_obj_set_style_bg_color(detail_modal, lv_color_hex(0x111111), LV_PART_MAIN);
-  lv_obj_set_style_bg_opa(detail_modal, LV_OPA_COVER, LV_PART_MAIN);
-  lv_obj_set_style_border_width(detail_modal, 0, LV_PART_MAIN);
-  lv_obj_set_style_radius(detail_modal, 0, LV_PART_MAIN);
-  lv_obj_clear_flag(detail_modal, LV_OBJ_FLAG_SCROLLABLE);
+  uint32_t bg32 = statusColor(t.getStatus(), t.getLatency());
+  uint16_t bg = tft->color565((bg32 >> 16) & 0xFF, (bg32 >> 8) & 0xFF, bg32 & 0xFF);
+  uint16_t fg = TFT_WHITE;
 
-  // Botão X no canto superior direito
-  lv_obj_t* close_btn = lv_btn_create(detail_modal);
-  lv_obj_set_size(close_btn, 36, 36);
-  lv_obj_set_pos(close_btn, 196, 8);
-  lv_obj_set_style_bg_color(close_btn, lv_color_hex(0x333333), LV_PART_MAIN);
-  lv_obj_set_style_radius(close_btn, 18, LV_PART_MAIN);
-  lv_obj_add_event_cb(close_btn, [](lv_event_t* e) {
-    DisplayManager* dm = static_cast<DisplayManager*>(lv_event_get_user_data(e));
-    if (dm) dm->closeDetailModal();
-  }, LV_EVENT_CLICKED, this);
-  lv_obj_t* close_label = lv_label_create(close_btn);
-  lv_label_set_text(close_label, "X");
-  lv_obj_set_style_text_color(close_label, lv_color_hex(0xAAAAAA), LV_PART_MAIN);
-  lv_obj_center(close_label);
+  tft->fillRoundRect(ITEM_X, y, ITEM_W, ITEM_H, 4, bg);
 
-  // Nome do target
-  lv_obj_t* name_label = lv_label_create(detail_modal);
-  lv_label_set_text(name_label, t.getName().c_str());
-  lv_obj_set_style_text_color(name_label, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
-  lv_obj_set_style_text_font(name_label, &lv_font_montserrat_14, LV_PART_MAIN);
-  lv_obj_set_pos(name_label, 16, 16);
+  tft->setTextColor(fg, bg);
+  tft->setTextDatum(ML_DATUM);
+  tft->setTextSize(1);
+  tft->drawString(t.getName(), ITEM_X + 8, y + ITEM_H / 2, 2);
 
-  // Linha separadora
-  lv_obj_t* sep = lv_obj_create(detail_modal);
-  lv_obj_set_size(sep, 208, 1);
-  lv_obj_set_pos(sep, 16, 40);
-  lv_obj_set_style_bg_color(sep, lv_color_hex(0x333333), LV_PART_MAIN);
-  lv_obj_set_style_border_width(sep, 0, LV_PART_MAIN);
-  lv_obj_set_style_radius(sep, 0, LV_PART_MAIN);
+  tft->setTextDatum(MR_DATUM);
+  tft->drawString(t.getLatencyText(), ITEM_X + ITEM_W - 8, y + ITEM_H / 2, 2);
+}
+
+void DisplayManager::drawFooter() {
+  uint16_t bg = tft->color565(0x1a, 0x1a, 0x1a);
+  tft->fillRect(0, FOOTER_Y, 240, FOOTER_H, bg);
+  String text = getFooterText();
+  tft->setTextColor(tft->color565(0xAA, 0xAA, 0xAA), bg);
+  tft->setTextDatum(MC_DATUM);
+  tft->setTextSize(1);
+  tft->drawString(text, 120, FOOTER_Y + FOOTER_H / 2, 1);
+}
+
+void DisplayManager::drawModal(int index) {
+  if (!targets || index < 0 || index >= targetCount) return;
+  Target& t = targets[index];
+
+  tft->fillScreen(tft->color565(0x0d, 0x0d, 0x0d));
+
+  // Header
+  uint16_t hdr_bg = tft->color565(0x1a, 0x1a, 0x2e);
+  tft->fillRect(0, 0, 240, TITLE_H, hdr_bg);
+  tft->setTextColor(TFT_WHITE, hdr_bg);
+  tft->setTextDatum(ML_DATUM);
+  tft->drawString(t.getName(), 12, 20, 2);
+
+  // X button
+  tft->fillCircle(216, 20, 14, tft->color565(0x33, 0x33, 0x33));
+  tft->setTextColor(tft->color565(0xAA, 0xAA, 0xAA), tft->color565(0x33, 0x33, 0x33));
+  tft->setTextDatum(MC_DATUM);
+  tft->drawString("X", 216, 20, 2);
+
+  // Separator
+  tft->drawFastHLine(12, 46, 216, tft->color565(0x2a, 0x2a, 0x2a));
 
   // Status
-  lv_obj_t* status_label = lv_label_create(detail_modal);
-  String status_text = "Status:  " + String(t.getStatusText());
-  lv_label_set_text(status_label, status_text.c_str());
-  lv_obj_set_style_text_color(status_label, t.isHealthy() ? lv_color_hex(0x00FF88) : lv_color_hex(0xFF4444), LV_PART_MAIN);
-  lv_obj_set_pos(status_label, 16, 56);
+  uint32_t sc = statusColor(t.getStatus(), t.getLatency());
+  uint16_t status_col = tft->color565((sc >> 16) & 0xFF, (sc >> 8) & 0xFF, sc & 0xFF);
+  tft->setTextDatum(ML_DATUM);
+  tft->setTextColor(status_col, tft->color565(0x0d, 0x0d, 0x0d));
+  tft->drawString("Status:   " + String(t.getStatusText()), 12, 64, 2);
 
-  // Latência
-  lv_obj_t* latency_label = lv_label_create(detail_modal);
-  String latency_text = "Latency: " + t.getLatencyText();
-  lv_label_set_text(latency_label, latency_text.c_str());
-  lv_obj_set_style_text_color(latency_label, lv_color_hex(0xCCCCCC), LV_PART_MAIN);
-  lv_obj_set_pos(latency_label, 16, 80);
+  uint16_t dim = tft->color565(0xCC, 0xCC, 0xCC);
+  uint16_t muted = tft->color565(0x88, 0x88, 0x88);
+  uint16_t modal_bg = tft->color565(0x0d, 0x0d, 0x0d);
 
-  // Falhas na sessão
-  lv_obj_t* fail_label = lv_label_create(detail_modal);
-  String fail_text = "Failures: " + String(t.getFailCount());
-  lv_label_set_text(fail_label, fail_text.c_str());
-  lv_obj_set_style_text_color(fail_label, t.getFailCount() > 0 ? lv_color_hex(0xFF8800) : lv_color_hex(0x888888), LV_PART_MAIN);
-  lv_obj_set_pos(fail_label, 16, 104);
+  tft->setTextColor(dim, modal_bg);
+  tft->drawString("Latency:  " + t.getLatencyText(), 12, 92, 2);
 
-  // Último downtime
-  lv_obj_t* down_label = lv_label_create(detail_modal);
+  uint16_t fail_col = t.getFailCount() > 0 ? tft->color565(0xFF, 0x88, 0x00) : muted;
+  tft->setTextColor(fail_col, modal_bg);
+  tft->drawString("Failures: " + String(t.getFailCount()), 12, 120, 2);
+
+  tft->setTextColor(muted, modal_bg);
+
   String down_text;
   if (t.getLastDownDuration() > 0) {
     unsigned long secs = t.getLastDownDuration() / 1000;
@@ -378,153 +170,116 @@ void DisplayManager::openDetailModal(int index) {
   } else {
     down_text = "Last down: --";
   }
-  lv_label_set_text(down_label, down_text.c_str());
-  lv_obj_set_style_text_color(down_label, lv_color_hex(0x888888), LV_PART_MAIN);
-  lv_obj_set_pos(down_label, 16, 128);
+  tft->drawString(down_text, 12, 148, 2);
 
-  // Tempo desde último status change
-  lv_obj_t* since_label = lv_label_create(detail_modal);
   String since_text;
   if (t.getLastStatusChange() > 0) {
     unsigned long secs = (millis() - t.getLastStatusChange()) / 1000;
-    if (secs < 60) since_text = "Since:    " + String(secs) + "s";
-    else if (secs < 3600) since_text = "Since:    " + String(secs / 60) + "m";
-    else since_text = "Since:    " + String(secs / 3600) + "h" + String((secs % 3600) / 60) + "m";
+    if (secs < 60) since_text = "Since:     " + String(secs) + "s";
+    else if (secs < 3600) since_text = "Since:     " + String(secs / 60) + "m";
+    else since_text = "Since:     " + String(secs / 3600) + "h" + String((secs % 3600) / 60) + "m";
   } else {
-    since_text = "Since:    --";
+    since_text = "Since:     --";
   }
-  lv_label_set_text(since_label, since_text.c_str());
-  lv_obj_set_style_text_color(since_label, lv_color_hex(0x888888), LV_PART_MAIN);
-  lv_obj_set_pos(since_label, 16, 152);
+  tft->drawString(since_text, 12, 172, 2);
+}
 
-  pending_refresh = true;
+// ── Touch ─────────────────────────────────────────────────────────────────────
+
+void DisplayManager::handleTouch() {
+  if (!TouchHandler::isTouched()) return;
+
+  int16_t x, y;
+  TouchHandler::getTouchCoordinates(x, y);
+
+  if (modal_open) {
+    // X button area
+    if (x >= 196 && x <= 236 && y >= 6 && y <= 40) closeDetailModal();
+    return;
+  }
+
+  // Footer
+  if (y >= FOOTER_Y && y <= FOOTER_Y + FOOTER_H) {
+    onFooterTouched();
+    return;
+  }
+
+  // Status items
+  for (int i = 0; i < targetCount && i < 6; i++) {
+    int iy = ITEMS_Y + i * (ITEM_H + ITEM_GAP);
+    if (x >= ITEM_X && x <= ITEM_X + ITEM_W && (y + 15) >= iy && (y + 15) < iy + ITEM_H) {
+      onStatusItemTouched(i);
+      return;
+    }
+  }
+}
+
+void DisplayManager::onFooterTouched() {
+  cycleFooterMode();
+}
+
+void DisplayManager::cycleFooterMode() {
+  footer_mode = (footer_mode + 1) % 3;
+  drawFooter();
+}
+
+void DisplayManager::onStatusItemTouched(int index) {
+  if (index < 0 || index >= targetCount) return;
+  openDetailModal(index);
+}
+
+void DisplayManager::openDetailModal(int index) {
+  modal_open = true;
+  modal_target_index = index;
+  drawModal(index);
 }
 
 void DisplayManager::closeDetailModal() {
-  if (detail_modal && lv_obj_is_valid(detail_modal)) {
-    lv_obj_del(detail_modal);
-  }
-  detail_modal = nullptr;
-  pending_refresh = true;
+  modal_open = false;
+  modal_target_index = -1;
+  drawMainScreen();
+}
+
+void DisplayManager::updateFooter() {
+  if (!modal_open) drawFooter();
 }
 
 void DisplayManager::updateStatusItem(int index) {
-  if (index < 0 || index >= targetCount || !targets) return;
-  
-  // Additional safety checks
-  if (index >= 6) return;
-  
-  Target& target = targets[index];
-  
-  Serial_printf("[DISPLAY] Updating status item %d: %s - %s (%d ms)\n", 
-               index, target.getName().c_str(), 
-               target.getStatusText().c_str(), target.getLatency());
-  
-  // Update latency label with safety check
-  if (latency_labels[index] && lv_obj_is_valid(latency_labels[index])) {
-    String latencyText = target.getLatencyText();
-    lv_label_set_text(latency_labels[index], latencyText.c_str());
-    Serial_printf("[DISPLAY] Updated latency label %d: %s\n", index, latencyText.c_str());
-  } else {
-    Serial_printf("[DISPLAY] ERROR: Latency label %d is null or invalid!\n", index);
-  }
-  
-  // Update colors with safety check
-  if (status_labels[index] && lv_obj_is_valid(status_labels[index])) {
-    setStatusItemColor(index, target.getStatus(), target.getLatency());
-  } else {
-    Serial_printf("[DISPLAY] ERROR: Status label %d is null or invalid!\n", index);
-  }
-  
-  // Force a gentle refresh to show changes
-  if (status_labels[index] && lv_obj_is_valid(status_labels[index])) {
-    lv_obj_invalidate(status_labels[index]);
-    // Also invalidate parent to ensure full refresh
-    lv_obj_invalidate(lv_obj_get_parent(status_labels[index]));
-  }
-  
-  pending_refresh = true;
+  if (!modal_open) drawStatusItem(index);
 }
 
-void DisplayManager::setStatusItemColor(int index, Status status, uint16_t latency) {
-  if (index < 0 || index >= 6 || !status_labels[index]) return;
-  
-  // Additional safety check
-  if (!lv_obj_is_valid(status_labels[index])) return;
-  
-  lv_color_t bg_color, text_color;
-  
-  if (status == UP) {
-    if (latency < 500) {
-      bg_color = lv_color_hex(0xFF00FF); // Green for good latency
-      text_color = lv_color_hex(0xFFFFFF);
-    } else {
-      bg_color = lv_color_hex(0x0086ff); // Blue for slow latency
-      text_color = lv_color_hex(0x000000);
-    }
-  } else if (status == DOWN) {
-    bg_color = lv_color_hex(0x00FFFF); // Red for down
-    text_color = lv_color_hex(0x000000);
-  } else {
-    bg_color = lv_color_hex(0x111111); // Gray for unknown
-    text_color = lv_color_hex(0xCCCCCC);
-  }
-  
-  lv_obj_set_style_bg_color(status_labels[index], bg_color, LV_PART_MAIN);
-  
-  if (name_labels[index] && lv_obj_is_valid(name_labels[index])) {
-    lv_obj_set_style_text_color(name_labels[index], text_color, LV_PART_MAIN);
-  }
-  if (latency_labels[index] && lv_obj_is_valid(latency_labels[index])) {
-    lv_obj_set_style_text_color(latency_labels[index], text_color, LV_PART_MAIN);
-  }
-  
-  lv_obj_invalidate(status_labels[index]);
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+uint32_t DisplayManager::statusColor(Status s, uint16_t latency) {
+  if (s == UP)   return latency < 500 ? C_UP_FAST : C_UP_SLOW;
+  if (s == DOWN) return C_DOWN;
+  return C_UNKNOWN;
 }
 
 String DisplayManager::getFooterText() const {
   if (!targets) return "No targets";
-  
+
   switch (footer_mode) {
-    case 0: { // System Overview
-      int active_alerts = 0, targets_up = 0;
+    case 0: {
+      int alerts = 0, up = 0;
       for (int i = 0; i < targetCount; i++) {
-        if (targets[i].isDown()) active_alerts++;
-        if (targets[i].isHealthy()) targets_up++;
+        if (targets[i].isDown()) alerts++;
+        if (targets[i].isHealthy()) up++;
       }
-      
-      // Calculate uptime
-      unsigned long uptime_ms = millis();
-      unsigned long hours = uptime_ms / 3600000;
-      unsigned long minutes = (uptime_ms % 3600000) / 60000;
-      String uptime_str = String(hours) + ":" + (minutes < 10 ? "0" : "") + String(minutes);
-      
-      return "Alerts: " + String(active_alerts) + " | On: " + String(targets_up) + "/" + String(targetCount) + " | Up: " + uptime_str;
+      unsigned long secs = millis() / 1000;
+      String uptime = String(secs / 3600) + ":" + (((secs % 3600) / 60) < 10 ? "0" : "") + String((secs % 3600) / 60);
+      return "Alerts:" + String(alerts) + " On:" + String(up) + "/" + String(targetCount) + " Up:" + uptime;
     }
-    case 1: { // Network Info
-      // Get dynamic WiFi info
+    case 1: {
       String ip = WiFi.localIP().toString();
-      int32_t rssi = WiFi.RSSI();
-      String rssi_str = String(rssi) + " dBm";
-      
-      return "IP: " + ip + " | " + rssi_str;
+      return "IP:" + ip + " " + String(WiFi.RSSI()) + "dBm";
     }
-    case 2: { // Performance
-      // Get dynamic memory info
-      uint32_t free_heap = ESP.getFreeHeap();
-      uint32_t total_heap = ESP.getHeapSize();
-      uint32_t heap_percent = (total_heap - free_heap) * 100 / total_heap;
-      
-      // Get free PSRAM if available
-      uint32_t free_psram = ESP.getFreePsram();
-      String rom_str = String(free_psram / 1024) + "KB";
-      if (free_psram == 0) {
-        rom_str = String(free_heap / 1024) + "KB";
-      }
-      
-      return "Cpu: 45% | Ram: " + String(heap_percent) + "% | HP: " + rom_str;
+    case 2: {
+      uint32_t free = ESP.getFreeHeap();
+      uint32_t total = ESP.getHeapSize();
+      uint32_t pct = (total - free) * 100 / total;
+      return "RAM:" + String(pct) + "% Free:" + String(free / 1024) + "KB";
     }
-    default:
-      return "Unknown mode";
+    default: return "";
   }
 }

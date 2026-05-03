@@ -1,5 +1,4 @@
 #include <Arduino.h>
-#include <lvgl.h>
 #include <TFT_eSPI.h>
 
 // Core includes
@@ -26,25 +25,7 @@ DisplayManager* displayManager;
 NetworkMonitor* networkMonitor;
 TaskManager* taskManager;
 
-// LVGL display objects
 TFT_eSPI* tft;
-lv_disp_draw_buf_t draw_buf;
-lv_color_t buf1[240 * 10];
-lv_color_t buf2[240 * 10];
-lv_disp_drv_t disp_drv;
-
-// LVGL flush callback
-void display_flush(lv_disp_drv_t* disp, const lv_area_t* area, lv_color_t* color_p) {
-  uint32_t w = (area->x2 - area->x1 + 1);
-  uint32_t h = (area->y2 - area->y1 + 1);
-  
-  tft->startWrite();
-  tft->setAddrWindow(area->x1, area->y1, w, h);
-  tft->pushColors((uint16_t*)&color_p->full, w * h, true);
-  tft->endWrite();
-  
-  lv_disp_flush_ready(disp);
-}
 
 void setup() {
   Serial.begin(115200);
@@ -76,22 +57,7 @@ void setup() {
   pinMode(27, OUTPUT);
   digitalWrite(27, HIGH);
   
-  // 3. Initialize LVGL
-  LOG_MAIN("Initializing LVGL...");
-  lv_init();
-  
-  // Initialize display buffer
-  lv_disp_draw_buf_init(&draw_buf, buf1, buf2, 240 * 10);
-  
-  // Initialize display driver
-  lv_disp_drv_init(&disp_drv);
-  disp_drv.hor_res = 240;
-  disp_drv.ver_res = 320;
-  disp_drv.flush_cb = display_flush;
-  disp_drv.draw_buf = &draw_buf;
-  lv_disp_drv_register(&disp_drv);
-  
-  // 4. Create service instances
+  // 3. Create service instances
   LOG_MAIN("Creating service instances...");
   wifiService = new WiFiService();
   httpClient = new HttpClient();
