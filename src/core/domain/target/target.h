@@ -7,6 +7,7 @@ private:
   String name;
   String url;
   String healthEndpoint;
+  String group;
   MonitorType monitorType;
   Status status;
   uint16_t latency;
@@ -34,7 +35,9 @@ public:
   void setName(const String& n) { name = n; }
   void setUrl(const String& u) { url = u; }
   void setHealthEndpoint(const String& he) { healthEndpoint = he; }
+  void setGroup(const String& g) { group = g.length() > 0 ? g : "Default"; }
   void setMonitorType(MonitorType mt) { monitorType = mt; }
+  String getGroup() const { return group; }
   void setLatency(uint16_t l) { latency = l; }
   void setStatus(Status s) {
     if (s != status) {

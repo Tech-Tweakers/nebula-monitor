@@ -67,13 +67,16 @@ void setup() {
   
   // 2. Initialize TFT display
   LOG_MAIN("Initializing TFT display...");
+  // Backlight off during init to avoid white flash
+  pinMode(27, OUTPUT);
+  digitalWrite(27, LOW);
+
   tft = new TFT_eSPI();
   tft->init();
   tft->setRotation(2);
   tft->fillScreen(TFT_BLACK);
-  
-  // Set backlight
-  pinMode(27, OUTPUT);
+
+  // Backlight on after screen is black
   digitalWrite(27, HIGH);
   
   // 3. Initialize LVGL

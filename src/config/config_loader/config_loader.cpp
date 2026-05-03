@@ -237,11 +237,34 @@ String ConfigLoader::getTargetMonitorType(int index) {
   String key = "TARGET_" + String(index + 1);
   String value = getValue(key.c_str(), "");
   if (value.length() == 0) return "PING";
-  
-  int pipe3 = value.lastIndexOf('|');
+
+  // Format: Name|URL|HealthEndpoint|Type|Group
+  int pipe1 = value.indexOf('|');
+  if (pipe1 == -1) return "PING";
+  int pipe2 = value.indexOf('|', pipe1 + 1);
+  if (pipe2 == -1) return "PING";
+  int pipe3 = value.indexOf('|', pipe2 + 1);
   if (pipe3 == -1) return "PING";
-  
-  return value.substring(pipe3 + 1);
+  int pipe4 = value.indexOf('|', pipe3 + 1);
+
+  String type = pipe4 == -1 ? value.substring(pipe3 + 1) : value.substring(pipe3 + 1, pipe4);
+  return type.length() == 0 ? "PING" : type;
+}
+
+String ConfigLoader::getTargetGroup(int index) {
+  String key = "TARGET_" + String(index + 1);
+  String value = getValue(key.c_str(), "");
+  if (value.length() == 0) return "Default";
+
+  int pipe4 = -1, pipe = -1;
+  for (int i = 0; i < 4; i++) {
+    pipe = value.indexOf('|', pipe + 1);
+    if (pipe == -1) return "Default";
+    if (i == 3) pipe4 = pipe;
+  }
+  String group = value.substring(pipe4 + 1);
+  group.trim();
+  return group.length() > 0 ? group : "Default";
 }
 
 // Display Configuration
