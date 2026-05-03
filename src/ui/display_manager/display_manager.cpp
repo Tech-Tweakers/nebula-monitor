@@ -307,12 +307,12 @@ void DisplayManager::openDetailModal(int index) {
 
   Target& t = targets[index];
 
-  // Overlay escuro cobrindo tudo
+  // Overlay opaco cobrindo tudo
   detail_modal = lv_obj_create(main_screen);
   lv_obj_set_size(detail_modal, 240, 320);
   lv_obj_set_pos(detail_modal, 0, 0);
-  lv_obj_set_style_bg_color(detail_modal, lv_color_hex(0x1a1a1a), LV_PART_MAIN);
-  lv_obj_set_style_bg_opa(detail_modal, LV_OPA_90, LV_PART_MAIN);
+  lv_obj_set_style_bg_color(detail_modal, lv_color_hex(0x111111), LV_PART_MAIN);
+  lv_obj_set_style_bg_opa(detail_modal, LV_OPA_COVER, LV_PART_MAIN);
   lv_obj_set_style_border_width(detail_modal, 0, LV_PART_MAIN);
   lv_obj_set_style_radius(detail_modal, 0, LV_PART_MAIN);
   lv_obj_clear_flag(detail_modal, LV_OBJ_FLAG_SCROLLABLE);
@@ -321,36 +321,81 @@ void DisplayManager::openDetailModal(int index) {
   lv_obj_t* close_btn = lv_btn_create(detail_modal);
   lv_obj_set_size(close_btn, 36, 36);
   lv_obj_set_pos(close_btn, 196, 8);
-  lv_obj_set_style_bg_color(close_btn, lv_color_hex(0x444444), LV_PART_MAIN);
+  lv_obj_set_style_bg_color(close_btn, lv_color_hex(0x333333), LV_PART_MAIN);
   lv_obj_set_style_radius(close_btn, 18, LV_PART_MAIN);
   lv_obj_add_event_cb(close_btn, [](lv_event_t* e) {
     DisplayManager* dm = static_cast<DisplayManager*>(lv_event_get_user_data(e));
     if (dm) dm->closeDetailModal();
   }, LV_EVENT_CLICKED, this);
-
   lv_obj_t* close_label = lv_label_create(close_btn);
   lv_label_set_text(close_label, "X");
+  lv_obj_set_style_text_color(close_label, lv_color_hex(0xAAAAAA), LV_PART_MAIN);
   lv_obj_center(close_label);
 
   // Nome do target
   lv_obj_t* name_label = lv_label_create(detail_modal);
   lv_label_set_text(name_label, t.getName().c_str());
   lv_obj_set_style_text_color(name_label, lv_color_hex(0xFFFFFF), LV_PART_MAIN);
-  lv_obj_set_pos(name_label, 16, 20);
+  lv_obj_set_style_text_font(name_label, &lv_font_montserrat_14, LV_PART_MAIN);
+  lv_obj_set_pos(name_label, 16, 16);
+
+  // Linha separadora
+  lv_obj_t* sep = lv_obj_create(detail_modal);
+  lv_obj_set_size(sep, 208, 1);
+  lv_obj_set_pos(sep, 16, 40);
+  lv_obj_set_style_bg_color(sep, lv_color_hex(0x333333), LV_PART_MAIN);
+  lv_obj_set_style_border_width(sep, 0, LV_PART_MAIN);
+  lv_obj_set_style_radius(sep, 0, LV_PART_MAIN);
 
   // Status
   lv_obj_t* status_label = lv_label_create(detail_modal);
-  String status_text = "Status: " + String(t.getStatusText());
+  String status_text = "Status:  " + String(t.getStatusText());
   lv_label_set_text(status_label, status_text.c_str());
   lv_obj_set_style_text_color(status_label, t.isHealthy() ? lv_color_hex(0x00FF88) : lv_color_hex(0xFF4444), LV_PART_MAIN);
-  lv_obj_set_pos(status_label, 16, 60);
+  lv_obj_set_pos(status_label, 16, 56);
 
   // Latência
   lv_obj_t* latency_label = lv_label_create(detail_modal);
   String latency_text = "Latency: " + t.getLatencyText();
   lv_label_set_text(latency_label, latency_text.c_str());
   lv_obj_set_style_text_color(latency_label, lv_color_hex(0xCCCCCC), LV_PART_MAIN);
-  lv_obj_set_pos(latency_label, 16, 90);
+  lv_obj_set_pos(latency_label, 16, 80);
+
+  // Falhas na sessão
+  lv_obj_t* fail_label = lv_label_create(detail_modal);
+  String fail_text = "Failures: " + String(t.getFailCount());
+  lv_label_set_text(fail_label, fail_text.c_str());
+  lv_obj_set_style_text_color(fail_label, t.getFailCount() > 0 ? lv_color_hex(0xFF8800) : lv_color_hex(0x888888), LV_PART_MAIN);
+  lv_obj_set_pos(fail_label, 16, 104);
+
+  // Último downtime
+  lv_obj_t* down_label = lv_label_create(detail_modal);
+  String down_text;
+  if (t.getLastDownDuration() > 0) {
+    unsigned long secs = t.getLastDownDuration() / 1000;
+    if (secs < 60) down_text = "Last down: " + String(secs) + "s";
+    else down_text = "Last down: " + String(secs / 60) + "m" + String(secs % 60) + "s";
+  } else {
+    down_text = "Last down: --";
+  }
+  lv_label_set_text(down_label, down_text.c_str());
+  lv_obj_set_style_text_color(down_label, lv_color_hex(0x888888), LV_PART_MAIN);
+  lv_obj_set_pos(down_label, 16, 128);
+
+  // Tempo desde último status change
+  lv_obj_t* since_label = lv_label_create(detail_modal);
+  String since_text;
+  if (t.getLastStatusChange() > 0) {
+    unsigned long secs = (millis() - t.getLastStatusChange()) / 1000;
+    if (secs < 60) since_text = "Since:    " + String(secs) + "s";
+    else if (secs < 3600) since_text = "Since:    " + String(secs / 60) + "m";
+    else since_text = "Since:    " + String(secs / 3600) + "h" + String((secs % 3600) / 60) + "m";
+  } else {
+    since_text = "Since:    --";
+  }
+  lv_label_set_text(since_label, since_text.c_str());
+  lv_obj_set_style_text_color(since_label, lv_color_hex(0x888888), LV_PART_MAIN);
+  lv_obj_set_pos(since_label, 16, 152);
 
   pending_refresh = true;
 }

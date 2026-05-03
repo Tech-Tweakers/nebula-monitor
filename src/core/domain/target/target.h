@@ -10,6 +10,12 @@ private:
   MonitorType monitorType;
   Status status;
   uint16_t latency;
+
+  // Session stats
+  uint16_t failCount;
+  unsigned long lastDownTime;
+  unsigned long lastDownDuration;
+  unsigned long lastStatusChange;
   
 public:
   // Constructor
@@ -29,8 +35,21 @@ public:
   void setUrl(const String& u) { url = u; }
   void setHealthEndpoint(const String& he) { healthEndpoint = he; }
   void setMonitorType(MonitorType mt) { monitorType = mt; }
-  void setStatus(Status s) { status = s; }
   void setLatency(uint16_t l) { latency = l; }
+  void setStatus(Status s) {
+    if (s != status) {
+      lastStatusChange = millis();
+      if (s == DOWN) lastDownTime = millis();
+      if (status == DOWN && s != DOWN) lastDownDuration = millis() - lastDownTime;
+      if (s == DOWN) failCount++;
+    }
+    status = s;
+  }
+
+  // Session stats getters
+  uint16_t getFailCount() const { return failCount; }
+  unsigned long getLastDownDuration() const { return lastDownDuration; }
+  unsigned long getLastStatusChange() const { return lastStatusChange; }
   
   // Business logic
   bool isHealthy() const { return status == UP; }
