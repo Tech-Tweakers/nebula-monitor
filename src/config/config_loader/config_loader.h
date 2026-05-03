@@ -47,6 +47,7 @@ public:
   static String getTargetUrl(int index);
   static String getTargetHealthEndpoint(int index);
   static String getTargetMonitorType(int index);
+  static String getTargetGroup(int index);
   
   // Display Configuration
   static int getDisplayRotation();

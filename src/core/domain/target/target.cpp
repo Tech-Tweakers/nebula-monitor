@@ -4,7 +4,7 @@
 Target::Target(const String& name, const String& url, 
                const String& healthEndpoint, MonitorType type) 
   : name(name), url(url), healthEndpoint(healthEndpoint), 
-    monitorType(type), status(UNKNOWN), latency(0),
+    monitorType(type), group("Default"), status(UNKNOWN), latency(0),
     failCount(0), lastDownTime(0), lastDownDuration(0), lastStatusChange(0) {
 }
 

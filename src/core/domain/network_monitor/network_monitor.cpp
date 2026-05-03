@@ -164,10 +164,12 @@ bool NetworkMonitor::loadTargets() {
     String url = ConfigLoader::getTargetUrl(i);
     String healthEndpoint = ConfigLoader::getTargetHealthEndpoint(i);
     String monitorTypeStr = ConfigLoader::getTargetMonitorType(i);
-    
+    String group = ConfigLoader::getTargetGroup(i);
+
     MonitorType type = parseMonitorType(monitorTypeStr);
-    
+
     targets[i] = Target(name, url, healthEndpoint, type);
+    targets[i].setGroup(group);
     targets[i].setStatus(UNKNOWN);
     targets[i].setLatency(0);
     

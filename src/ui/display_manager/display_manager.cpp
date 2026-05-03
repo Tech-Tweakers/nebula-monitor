@@ -19,6 +19,7 @@ static inline uint16_t c(uint32_t rgb) {
 DisplayManager::DisplayManager()
   : initialized(false), footer_mode(0), last_uptime_update(0),
     pending_refresh(false), modal_open(false), modal_target_index(-1),
+    current_page(0), page_count(0),
     targets(nullptr), targetCount(0) {}
 
 bool DisplayManager::initialize() {
@@ -39,7 +40,29 @@ bool DisplayManager::initialize() {
 void DisplayManager::setTargets(Target* t, int count) {
   targets = t;
   targetCount = count;
-  if (initialized) drawMainScreen();
+  if (initialized) {
+    buildPageGroups();
+    drawMainScreen();
+  }
+}
+
+void DisplayManager::buildPageGroups() {
+  page_count = 0;
+  for (int i = 0; i < targetCount; i++) {
+    String g = targets[i].getGroup();
+    bool found = false;
+    for (int j = 0; j < page_count; j++) {
+      if (page_groups[j] == g) { found = true; break; }
+    }
+    if (!found && page_count < 10) page_groups[page_count++] = g;
+  }
+  if (page_count == 0) { page_groups[0] = "Default"; page_count = 1; }
+  current_page = 0;
+}
+
+void DisplayManager::nextPage() {
+  current_page = (current_page + 1) % page_count;
+  drawMainScreen();
 }
 
 void DisplayManager::update() {
@@ -87,19 +110,22 @@ void DisplayManager::onScanCompleted() {
 void DisplayManager::drawMainScreen() {
   tft->fillScreen(c(C_BG));
   drawTitleBar();
-  for (int i = 0; i < targetCount && i < 6; i++) drawStatusItem(i);
+  // Draw only targets of current page group
+  int row = 0;
+  for (int i = 0; i < targetCount && row < 8; i++) {
+    if (targets[i].getGroup() == page_groups[current_page]) {
+      drawStatusItem(i, row++);
+    }
+  }
   drawFooter();
 }
 
 void DisplayManager::drawTitleBar() {
   tft->fillRect(0, 0, 240, TITLE_H, c(C_TITLE_BG));
-  // accent line at bottom of title
   tft->drawFastHLine(0, TITLE_H - 1, 240, c(C_ACCENT));
 
-  // Draw title right-aligned
   tft->setTextSize(1);
   int nebula_w = tft->textWidth("NEBULA ", 2);
-  int monitor_w = tft->textWidth("MONITOR", 2);
   int start_x = 12;
   tft->setTextColor(c(C_WHITE), c(C_TITLE_BG));
   tft->setTextDatum(ML_DATUM);
@@ -107,16 +133,30 @@ void DisplayManager::drawTitleBar() {
   tft->setTextColor(c(C_ACCENT), c(C_TITLE_BG));
   tft->drawString("MONITOR", start_x + nebula_w, TITLE_H / 2, 2);
 
-  tft->setTextColor(c(C_DIM), c(C_TITLE_BG));
   tft->setTextDatum(MR_DATUM);
-  tft->drawString("v2.4.1", 232, TITLE_H / 2, 1);
+  if (page_count > 1) {
+    // Show "GroupName >" as page indicator — tappable
+    String nav = page_groups[current_page] + " >";
+    tft->setTextColor(c(C_ACCENT), c(C_TITLE_BG));
+    tft->drawString(nav, 232, TITLE_H / 2, 1);
+  } else {
+    tft->setTextColor(c(C_DIM), c(C_TITLE_BG));
+    tft->drawString("v2.4.1", 232, TITLE_H / 2, 1);
+  }
 }
 
-void DisplayManager::drawStatusItem(int index) {
+void DisplayManager::drawStatusItem(int index, int row) {
   if (!targets || index >= targetCount) return;
 
   Target& t = targets[index];
-  int y = ITEMS_Y + index * (ITEM_H + ITEM_GAP);
+  if (row < 0) {
+    // calculate row from current page
+    int r = 0;
+    for (int i = 0; i < index; i++)
+      if (targets[i].getGroup() == page_groups[current_page]) r++;
+    row = r;
+  }
+  int y = ITEMS_Y + row * (ITEM_H + ITEM_GAP);
   uint32_t sc = statusColor(t.getStatus(), t.getLatency());
 
   // Item background
@@ -224,17 +264,28 @@ void DisplayManager::handleTouch() {
     return;
   }
 
+  // Title bar right side → next page
+  if (ty >= 0 && ty < TITLE_H && x >= 180) {
+    nextPage();
+    return;
+  }
+
   if (ty >= FOOTER_Y && ty <= FOOTER_Y + FOOTER_H) {
     onFooterTouched();
     return;
   }
 
-  for (int i = 0; i < targetCount && i < 6; i++) {
-    int iy = ITEMS_Y + i * (ITEM_H + ITEM_GAP);
+  // Map row position back to target index for current page
+  int row = 0;
+  for (int i = 0; i < targetCount; i++) {
+    if (targets[i].getGroup() != page_groups[current_page]) continue;
+    int iy = ITEMS_Y + row * (ITEM_H + ITEM_GAP);
     if (x >= ITEM_X && x <= ITEM_X + ITEM_W && ty >= iy && ty < iy + ITEM_H) {
       onStatusItemTouched(i);
       return;
     }
+    row++;
+    if (row >= 8) break;
   }
 }
 
@@ -275,17 +326,21 @@ String DisplayManager::getFooterText() const {
         if (targets[i].isHealthy()) up++;
       }
       unsigned long secs = millis() / 1000;
-      String uptime = String(secs / 3600) + "h" + String((secs % 3600) / 60) + "m";
-      return "alerts:" + String(alerts) + "  up:" + String(up) + "/" + String(targetCount) + "  " + uptime;
+      unsigned long h = secs / 3600;
+      unsigned long m = (secs % 3600) / 60;
+      String uptime = String(h) + ":" + (m < 10 ? "0" : "") + String(m) + "h";
+      return "alerts: " + String(alerts) + "  up: " + String(up) + "/" + String(targetCount) + "  uptime: " + uptime;
     }
     case 1: {
-      return "ip:" + WiFi.localIP().toString() + "  " + String(WiFi.RSSI()) + "dBm";
+      int32_t rssi = WiFi.RSSI();
+      String quality = rssi > -50 ? "great" : rssi > -70 ? "good" : rssi > -80 ? "weak" : "poor";
+      return "ssid: " + WiFi.SSID() + "  " + String(rssi) + "dBm (" + quality + ")";
     }
     case 2: {
       uint32_t free = ESP.getFreeHeap();
       uint32_t total = ESP.getHeapSize();
       uint32_t pct = (total - free) * 100 / total;
-      return "ram:" + String(pct) + "%  free:" + String(free / 1024) + "KB";
+      return "ram: " + String(pct) + "%  free: " + String(free / 1024) + "KB  heap: " + String(ESP.getMinFreeHeap() / 1024) + "KB";
     }
     default: return "";
   }

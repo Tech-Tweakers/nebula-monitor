@@ -16,6 +16,11 @@ private:
   bool modal_open;
   int modal_target_index;
 
+  // Pagination
+  int current_page;
+  String page_groups[10];
+  int page_count;
+
   Target* targets;
   int targetCount;
 
@@ -48,7 +53,7 @@ private:
   static const uint32_t C_ACCENT    = 0x58a6ff;
 
   void drawTitleBar();
-  void drawStatusItem(int index);
+  void drawStatusItem(int index, int row = -1);
   void drawFooter();
   void drawModal(int index);
   void clearModal();
@@ -81,4 +86,6 @@ public:
   void updateFooter();
   void cycleFooterMode();
   void updateStatusItem(int index);
+  void nextPage();
+  void buildPageGroups();
 };
