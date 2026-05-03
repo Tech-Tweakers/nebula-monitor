@@ -96,13 +96,16 @@ void DisplayManager::drawTitleBar() {
   // accent line at bottom of title
   tft->drawFastHLine(0, TITLE_H - 1, 240, c(C_ACCENT));
 
+  // Draw title right-aligned
+  tft->setTextSize(1);
+  int nebula_w = tft->textWidth("NEBULA ", 2);
+  int monitor_w = tft->textWidth("MONITOR", 2);
+  int start_x = 12;
   tft->setTextColor(c(C_WHITE), c(C_TITLE_BG));
   tft->setTextDatum(ML_DATUM);
-  tft->setTextSize(1);
-  tft->drawString("NEBULA", 12, TITLE_H / 2, 2);
-
+  tft->drawString("NEBULA ", start_x, TITLE_H / 2, 2);
   tft->setTextColor(c(C_ACCENT), c(C_TITLE_BG));
-  tft->drawString(" MONITOR", 56, TITLE_H / 2, 2);
+  tft->drawString("MONITOR", start_x + nebula_w, TITLE_H / 2, 2);
 
   tft->setTextColor(c(C_DIM), c(C_TITLE_BG));
   tft->setTextDatum(MR_DATUM);
@@ -142,7 +145,7 @@ void DisplayManager::drawFooter() {
   String text = getFooterText();
   tft->setTextColor(c(C_DIM), c(C_FOOTER_BG));
   tft->setTextDatum(MC_DATUM);
-  tft->drawString(text, 120, FOOTER_Y + FOOTER_H / 2, 1);
+  tft->drawString(text, 120, FOOTER_Y + FOOTER_H / 2, 2);
 }
 
 void DisplayManager::drawModal(int index) {
@@ -214,19 +217,21 @@ void DisplayManager::handleTouch() {
   int16_t x, y;
   TouchHandler::getTouchCoordinates(x, y);
 
+  int16_t ty = y + 15; // Y offset correction
+
   if (modal_open) {
-    if (x >= 196 && x <= 236 && y >= 6 && y <= 40) closeDetailModal();
+    if (x >= 190 && x <= 240 && ty >= 6 && ty <= 44) closeDetailModal();
     return;
   }
 
-  if (y >= FOOTER_Y && y <= FOOTER_Y + FOOTER_H) {
+  if (ty >= FOOTER_Y && ty <= FOOTER_Y + FOOTER_H) {
     onFooterTouched();
     return;
   }
 
   for (int i = 0; i < targetCount && i < 6; i++) {
     int iy = ITEMS_Y + i * (ITEM_H + ITEM_GAP);
-    if (x >= ITEM_X && x <= ITEM_X + ITEM_W && (y + 15) >= iy && (y + 15) < iy + ITEM_H) {
+    if (x >= ITEM_X && x <= ITEM_X + ITEM_W && ty >= iy && ty < iy + ITEM_H) {
       onStatusItemTouched(i);
       return;
     }
